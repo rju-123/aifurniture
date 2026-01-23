@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ai-decoration
+    env: python
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
+    startCommand: python src/app.py
+    envVars:
+      - key: PORT
+        value: 5423
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_DEBUG
+        value: false
+      - key: PYTHON_VERSION
+        value: 3.10.12

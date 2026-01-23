@@ -1174,5 +1174,9 @@ if __name__ == '__main__':
     else:
         print("警告: 家具文件夹不存在!")
     
-    print("启动AI装修应用 v1.0")
-    app.run(debug=True, host='0.0.0.0', port=5423)
+    # 生产环境配置：支持 Render 等云平台的 PORT 环境变量
+    port = int(os.getenv('PORT', 5423))
+    debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    
+    print(f"启动AI装修应用 v1.0 on port {port}")
+    app.run(debug=debug, host='0.0.0.0', port=port)
