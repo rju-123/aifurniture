@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>遮罩图生成工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mask_style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎨 遮罩图生成工具</h1>
+            <p>上传客厅照片，拖拽放置家具，生成组合图和遮罩图</p>
+        </header>
+
+        <main>
+            <!-- 步骤指示器 -->
+            <div class="steps">
+                <div class="step active" id="step1">
+                    <span class="step-number">1</span>
+                    <span class="step-text">上传客厅</span>
+                </div>
+                <div class="step" id="step2">
+                    <span class="step-number">2</span>
+                    <span class="step-text">选择家具</span>
+                </div>
+                <div class="step" id="step3">
+                    <span class="step-number">3</span>
+                    <span class="step-text">拖放摆放</span>
+                </div>
+                <div class="step" id="step4">
+                    <span class="step-number">4</span>
+                    <span class="step-text">生成图片</span>
+                </div>
+            </div>
+
+            <!-- 上传区域 -->
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">📷</div>
+                        <h3>上传客厅照片</h3>
+                        <p>支持 JPG、PNG、GIF 格式，最大 16MB</p>
+                        <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                            选择文件
+                        </button>
+                    </div>
+                </div>
+                <div class="upload-preview" id="uploadPreview" style="display: none;">
+                    <img id="previewImage" src="" alt="预览图片">
+                    <button class="btn btn-secondary" onclick="resetUpload()">重新上传</button>
+                </div>
+            </div>
+
+            <!-- 家具选择区域 -->
+            <div class="furniture-section" id="furnitureSection" style="display: none;">
+                <h3>选择家具</h3>
+                <div class="furniture-grid" id="furnitureGrid">
+                    <!-- 家具列表将通过JavaScript动态加载 -->
+                </div>
+            </div>
+
+            <!-- 编辑区域 -->
+            <div class="editor-section" id="editorSection" style="display: none;">
+                <h3>拖放家具到客厅合适位置</h3>
+                <div class="editor-container">
+                    <div class="canvas-wrapper">
+                        <canvas id="fabricCanvas"></canvas>
+                    </div>
+                    <div class="editor-controls">
+                        <div class="selected-furniture">
+                            <h4>已选家具</h4>
+                            <div id="selectedFurnitureList"></div>
+                        </div>
+                        <div class="control-buttons">
+                            <button class="btn btn-secondary" onclick="clearCanvas()">清空画布</button>
+                            <button class="btn btn-secondary" onclick="deleteSelected()">删除选中</button>
+                            <button class="btn btn-primary" onclick="generateMasks()">生成图片</button>
+                        </div>
+                        <div class="tips">
+                            <h4>💡 操作提示</h4>
+                            <ul>
+                                <li>拖动家具调整位置</li>
+                                <li>拖动角落调整大小</li>
+                                <li>拖动旋转图标旋转家具</li>
+                                <li>点击家具后按Delete键删除</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 结果展示区域 -->
+            <div class="result-section" id="resultSection" style="display: none;">
+                <h3>生成结果</h3>
+                <div class="result-container">
+                    <div class="result-item">
+                        <h4>组合图（原图）</h4>
+                        <p class="description">客厅在底层，家具在上层的叠加图</p>
+                        <div class="result-image-wrapper">
+                            <img id="compositeImage" src="" alt="组合图">
+                        </div>
+                        <button class="btn btn-primary" onclick="downloadImage('composite')">下载组合图</button>
+                    </div>
+                    <div class="result-item">
+                        <h4>遮罩图</h4>
+                        <p class="description">家具部分为白色，背景为黑色</p>
+                        <div class="result-image-wrapper">
+                            <img id="maskImage" src="" alt="遮罩图">
+                        </div>
+                        <button class="btn btn-primary" onclick="downloadImage('mask')">下载遮罩图</button>
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <button class="btn btn-secondary" onclick="startOver()">重新开始</button>
+                </div>
+            </div>
+
+            <!-- 加载提示 -->
+            <div class="loading" id="loading" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>正在生成图片，请稍候...</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/mask_generator.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+{
+  "furniture": [
+    {
+      "filename": "sofa_1.jpg",
+      "display_name": "Modern Style Sofa 1",
+      "type": "sofa",
+      "style": "modern",
+      "length": 2.0,
+      "width": 0.9,
+      "height": 0.85,
+      "description": "Modern minimalist three-seater sofa, suitable for small to medium living rooms"
+    },
+    {
+      "filename": "sofa_2.jpg",
+      "display_name": "Nordic Style Sofa 1",
+      "type": "sofa",
+      "style": "nordic",
+      "length": 1.8,
+      "width": 0.8,
+      "height": 0.75,
+      "description": "Nordic style two-seater sofa, simple and comfortable"
+    },
+    {
+      "filename": "sofa_3.png",
+      "display_name": "European Style Sofa 1",
+      "type": "sofa",
+      "style": "european",
+      "length": 2.2,
+      "width": 1.0,
+      "height": 0.9,
+      "description": "Classic European style three-seater sofa, suitable for large living rooms"
+    },
+    {
+      "filename": "1c7ea4b59b8e5238a86ea8c0d574d8c8.png",
+      "display_name": "Minimalist Style Sofa",
+      "type": "sofa",
+      "style": "minimalist",
+      "length": 1.9,
+      "width": 0.85,
+      "height": 0.8,
+      "description": "Minimalist style sofa, suitable for modern minimalist living rooms"
+    },
+    {
+      "filename": "DM_20260107140731_008.png",
+      "display_name": "Modern Style Sofa 2",
+      "type": "sofa",
+      "style": "modern",
+      "length": 2.1,
+      "width": 0.95,
+      "height": 0.88,
+      "description": "Modern style three-seater sofa, suitable for medium living rooms"
+    },
+    {
+      "filename": "DM_20260107140731_009.png",
+      "display_name": "Nordic Style Sofa 2",
+      "type": "sofa",
+      "style": "nordic",
+      "length": 1.9,
+      "width": 0.9,
+      "height": 0.82,
+      "description": "Nordic style two-seater sofa, simple and comfortable"
+    },
+    {
+      "filename": "DM_20260107140731_010.png",
+      "display_name": "Modern Style Sofa 3",
+      "type": "sofa",
+      "style": "modern",
+      "length": 2.0,
+      "width": 0.92,
+      "height": 0.85,
+      "description": "Modern minimalist three-seater sofa"
+    },
+    {
+      "filename": "DM_20260107140731_014.png",
+      "display_name": "European Style Sofa 2",
+      "type": "sofa",
+      "style": "european",
+      "length": 2.3,
+      "width": 1.05,
+      "height": 0.92,
+      "description": "Classic European style three-seater sofa, suitable for large living rooms"
+    },
+    {
+      "filename": "DM_20260107141734_003.jpg",
+      "display_name": "Chinese Style Sofa 1",
+      "type": "sofa",
+      "style": "chinese",
+      "length": 2.0,
+      "width": 0.9,
+      "height": 0.85,
+      "description": "Traditional Chinese style sofa, elegant and magnificent"
+    },
+    {
+      "filename": "DM_20260107141734_005.png",
+      "display_name": "Industrial Style Sofa 1",
+      "type": "sofa",
+      "style": "industrial",
+      "length": 2.1,
+      "width": 0.95,
+      "height": 0.88,
+      "description": "Industrial style sofa, unique and modern"
+    },
+    {
+      "filename": "DM_20260107141734_007.jpg",
+      "display_name": "Minimalist Style Sofa 2",
+      "type": "sofa",
+      "style": "minimalist",
+      "length": 1.8,
+      "width": 0.85,
+      "height": 0.78,
+      "description": "Minimalist style two-seater sofa, ultra-minimal design"
+    },
+    {
+      "filename": "DM_20260107144825_001.jpg",
+      "display_name": "Modern Style Sofa 4",
+      "type": "sofa",
+      "style": "modern",
+      "length": 2.2,
+      "width": 1.0,
+      "height": 0.9,
+      "description": "Modern style three-seater sofa, suitable for medium to large living rooms"
+    },
+    {
+      "filename": "DM_20260107145151_001.jpg",
+      "display_name": "Nordic Style Sofa 3",
+      "type": "sofa",
+      "style": "nordic",
+      "length": 2.0,
+      "width": 0.9,
+      "height": 0.83,
+      "description": "Nordic style three-seater sofa, natural and comfortable"
+    }
+  ],
+  "styles": {
+    "modern": {
+      "name": "Modern Style",
+      "description": "Modern minimalist, smooth lines"
+    },
+    "nordic": {
+      "name": "Nordic Style",
+      "description": "Simple and natural, comfortable and warm"
+    },
+    "european": {
+      "name": "European Style",
+      "description": "Classic elegance, magnificent luxury"
+    },
+    "chinese": {
+      "name": "Chinese Style",
+      "description": "Traditional elegance, cultural heritage"
+    },
+    "industrial": {
+      "name": "Industrial Style",
+      "description": "Rough and unique, modern industrial"
+    },
+    "minimalist": {
+      "name": "Minimalist Style",
+      "description": "Ultra-minimal design, clean and neat"
+    }
+  },
+  "notes": [
+    "所有尺寸单位为米（m）",
+    "length: 长度（前后方向）",
+    "width: 宽度（左右方向）",
+    "height: 高度（上下方向）",
+    "添加新家具时，请在此文件中添加对应的元数据"
+  ]
+}

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能家装效果生成</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>智能家装效果生成</h1>
+            <p>上传客厅照片，选择家具，生成真实的装修效果图</p>
+        </header>
+
+        <main>
+            <!-- 步骤指示器 -->
+            <div class="steps">
+                <div class="step active" id="step1">
+                    <span class="step-number">1</span>
+                    <span class="step-text">上传客厅照片</span>
+                </div>
+                <div class="step" id="step2">
+                    <span class="step-number">2</span>
+                    <span class="step-text">选择家具</span>
+                </div>
+                <div class="step" id="step3">
+                    <span class="step-number">3</span>
+                    <span class="step-text">拖放摆放</span>
+                </div>
+                <div class="step" id="step4">
+                    <span class="step-number">4</span>
+                    <span class="step-text">生成效果图</span>
+                </div>
+            </div>
+
+            <!-- 上传区域 -->
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">📷</div>
+                        <h3>上传客厅照片</h3>
+                        <p>支持 JPG、PNG、GIF 格式，最大 16MB</p>
+                        <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                            选择文件
+                        </button>
+                    </div>
+                </div>
+                <div class="upload-preview" id="uploadPreview" style="display: none;">
+                    <img id="previewImage" src="" alt="预览图片">
+                    <button class="btn btn-secondary" onclick="resetUpload()">重新上传</button>
+                </div>
+            </div>
+
+            <!-- 家具选择区域 -->
+            <div class="furniture-section" id="furnitureSection" style="display: none;">
+                <h3>选择家具</h3>
+                <div class="furniture-categories">
+                    <button class="category-btn active" data-category="all">全部</button>
+                    <button class="category-btn" data-category="sofa">沙发</button>
+                    <button class="category-btn" data-category="table">桌子</button>
+                    <button class="category-btn" data-category="chair">椅子</button>
+                    <button class="category-btn" data-category="cabinet">柜子</button>
+                    <button class="category-btn" data-category="decoration">装饰品</button>
+                </div>
+                <div class="furniture-grid" id="furnitureGrid">
+                    <!-- 家具列表将通过JavaScript动态加载 -->
+                </div>
+            </div>
+
+            <!-- 编辑区域 -->
+            <div class="editor-section" id="editorSection" style="display: none;">
+                <h3>拖放家具到合适位置</h3>
+                <div class="editor-container">
+                    <div class="canvas-container">
+                        <canvas id="fabricCanvas"></canvas>
+                    </div>
+                    <div class="editor-controls">
+                        <div class="selected-furniture">
+                            <h4>已选择的家具</h4>
+                            <div id="selectedFurnitureList"></div>
+                        </div>
+                        <div class="control-buttons">
+                            <button class="btn btn-secondary" onclick="clearCanvas()">清空画布</button>
+                            <button class="btn btn-secondary" onclick="deleteSelected()">删除选中</button>
+                            <button class="btn btn-primary" onclick="generateDecoration()">生成效果图</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 结果展示区域 -->
+            <div class="result-section" id="resultSection" style="display: none;">
+                <h3>生成的装修效果图</h3>
+                <div class="result-container">
+                    <div class="result-image">
+                        <img id="resultImage" src="" alt="生成的效果图">
+                    </div>
+                    <div class="result-actions">
+                        <button class="btn btn-primary" onclick="downloadResult()">下载图片</button>
+                        <button class="btn btn-secondary" onclick="startOver()">重新开始</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 加载提示 -->
+            <div class="loading" id="loading" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>正在生成装修效果图，请稍候...</p>
+                <div class="loading-tips">
+                    <small>💡 提示：生成过程可能需要30-60秒，请耐心等待</small>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

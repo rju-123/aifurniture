@@ -1,0 +1,10 @@
+data/user/*
+data/output/*
+data/masks/*
+
+src/data/*
+
+prompt_log/*
+project_log/*
+src/data/user/*
+

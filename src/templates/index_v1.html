@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Smart Decoration v1.0</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .step {
+            margin-bottom: 40px;
+            padding: 30px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fafafa;
+        }
+
+        .step.active {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .step-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-weight: bold;
+        }
+
+        .upload-area {
+            border: 3px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #e8f0fe;
+        }
+
+        .furniture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .furniture-item {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .furniture-item:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .furniture-item.selected {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .furniture-item img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        #drawingCanvas {
+            cursor: none; /* 隐藏默认光标，我们将自定义光标 */
+        }
+
+        .canvas-cursor {
+            position: absolute;
+            border: 2px solid rgba(0, 123, 255, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10;
+            background: rgba(0, 123, 255, 0.2);
+            display: none;
+        }
+
+        .canvas-tools {
+            margin: 20px 0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .brush-size {
+            margin: 0 10px;
+        }
+
+        .brush-size input {
+            width: 100px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .result-container {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .result-image {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 20px;
+            }
+            
+            .furniture-grid {
+                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            }
+            
+            .canvas-tools {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .tool-group {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 AI Smart Decoration v1.0</h1>
+            <p>Upload living room image, select furniture, draw placement area, generate decoration effect image with one click</p>
+        </div>
+
+        <div class="main-content">
+            <!-- 步骤1: 上传客厅图片 -->
+            <div class="step active" id="step1">
+                <div class="step-title">
+                    <div class="step-number">1</div>
+                    Upload Living Room Image
+                </div>
+                <div class="upload-area" id="uploadArea">
+                    <div id="uploadContent">
+                        <p>📷 Click or drag to upload living room image</p>
+                        <p style="color: #666; margin-top: 10px;">Supports JPG, PNG, GIF formats, max 16MB</p>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                </div>
+                <div id="uploadedImage" style="display: none; text-align: center; margin-top: 20px;">
+                    <img id="previewImage" style="max-width: 100%; max-height: 400px; border-radius: 10px;">
+                </div>
+            </div>
+
+            <!-- 步骤2: 识别客厅尺寸 -->
+            <div class="step" id="step2">
+                <div class="step-title">
+                    <div class="step-number">2</div>
+                    Identify Living Room Dimensions
+                </div>
+                <div id="sizeDetectionArea">
+                    <div class="loading" id="sizeLoading" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Identifying living room dimensions, please wait...</p>
+                    </div>
+                    <div id="sizeResult" style="display: none;">
+                        <div style="background: #f0f8ff; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                            <h4 style="margin-bottom: 15px;">📏 Detected Living Room Dimensions:</h4>
+                            <div id="estimatedBadge" style="display: none; background: #fff3cd; padding: 8px 15px; border-radius: 20px; margin-bottom: 15px; text-align: center; color: #856404; font-size: 0.9em;">
+                                ⚠️ This is an estimated value based on the image, please confirm or modify
+                            </div>
+                            <div style="display: flex; gap: 30px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                <div>
+                                    <label style="font-weight: bold; color: #667eea;">Length:</label>
+                                    <span id="detectedLength" style="font-size: 1.2em; margin-left: 10px;">-</span>
+                                    <span style="color: #666;">m</span>
+                                </div>
+                                <div>
+                                    <label style="font-weight: bold; color: #667eea;">Width:</label>
+                                    <span id="detectedWidth" style="font-size: 1.2em; margin-left: 10px;">-</span>
+                                    <span style="color: #666;">m</span>
+                                </div>
+                            </div>
+                            <div id="sofaSizeRange" style="display: none; margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 10px;">
+                                <h5 style="margin-bottom: 10px; color: #2e7d32;">🛋️ Suitable Sofa Size Range:</h5>
+                                <div style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; font-size: 0.95em;">
+                                    <div>
+                                        <label style="color: #666;">Length:</label>
+                                        <span id="sofaLengthRange" style="font-weight: bold; color: #2e7d32;"></span>
+                                        <span style="color: #666;">m</span>
+                                    </div>
+                                    <div>
+                                        <label style="color: #666;">Width:</label>
+                                        <span id="sofaWidthRange" style="font-weight: bold; color: #2e7d32;"></span>
+                                        <span style="color: #666;">m</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;">
+                            <p style="margin: 0; color: #856404;">
+                                💡 If the recognition result is inaccurate, you can manually enter the correct dimensions:
+                            </p>
+                            <div style="display: flex; gap: 20px; margin-top: 15px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                <div>
+                                    <label>Length (m):</label>
+                                    <input type="number" id="manualLength" step="0.1" min="0" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 100px;">
+                                </div>
+                                <div>
+                                    <label>Width (m):</label>
+                                    <input type="number" id="manualWidth" step="0.1" min="0" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 100px;">
+                                </div>
+                                <div>
+                                    <button class="btn" id="confirmSizeBtnSuccess" onclick="confirmSizeModify()" style="margin-top: 10px; cursor: pointer;">Confirm Modification</button>
+                                </div>
+                            </div>
+                            <p id="sizeInputErrorSuccess" style="color: #dc3545; margin-top: 10px; display: none; text-align: center;"></p>
+                        </div>
+                    </div>
+                    <div id="sizeError" style="display: none; background: #f8d7da; padding: 15px; border-radius: 10px; color: #721c24;">
+                        <p id="sizeErrorMessage"></p>
+                        <div style="margin-top: 15px;">
+                            <p style="margin-bottom: 10px;">Please manually enter living room dimensions:</p>
+                            <div style="display: flex; gap: 20px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                <div>
+                                    <label>Length (m):</label>
+                                    <input type="number" id="manualLengthError" step="0.1" min="0" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 100px;">
+                                </div>
+                                <div>
+                                    <label>Width (m):</label>
+                                    <input type="number" id="manualWidthError" step="0.1" min="0" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 100px;">
+                                </div>
+                                <div>
+                                    <button class="btn" id="confirmSizeBtn" onclick="confirmSizeInput()" style="margin-top: 10px; cursor: pointer;">Confirm Dimensions</button>
+                                </div>
+                            </div>
+                            <p id="sizeInputError" style="color: #dc3545; margin-top: 10px; display: none; text-align: center;"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 步骤3: 选择沙发风格 -->
+            <div class="step" id="step3">
+                <div class="step-title">
+                    <div class="step-number">3</div>
+                    Select Sofa Style
+                </div>
+                <div id="styleSelectionArea">
+                    <div id="styleButtonsContainer" style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; margin: 20px 0;">
+                        <button class="btn style-btn" data-style="modern">Modern Style</button>
+                        <button class="btn style-btn" data-style="nordic">Nordic Style</button>
+                        <button class="btn style-btn" data-style="european">European Style</button>
+                        <button class="btn style-btn" data-style="chinese">Chinese Style</button>
+                        <button class="btn style-btn" data-style="industrial">Industrial Style</button>
+                        <button class="btn style-btn" data-style="minimalist">Minimalist Style</button>
+                    </div>
+                    <p id="selectedStyleText" style="text-align: center; color: #666; margin-top: 15px; display: none;">
+                        Selected Style: <span id="selectedStyleName" style="font-weight: bold; color: #667eea;"></span>
+                    </p>
+                    <div id="furnitureLoading" style="display: none; text-align: center; margin-top: 20px;">
+                        <div class="spinner" style="margin: 0 auto;"></div>
+                        <p>Loading sofas...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 步骤4: 选择沙发 -->
+            <div class="step" id="step4">
+                <div class="step-title">
+                    <div class="step-number">4</div>
+                    Select Sofa
+                </div>
+                <div id="furnitureGrid" class="furniture-grid">
+                    <!-- 家具列表将通过JavaScript动态加载 -->
+                </div>
+            </div>
+
+            <!-- 步骤5: 涂画放置区域 -->
+            <div class="step" id="step5">
+                <div class="step-title">
+                    <div class="step-number">5</div>
+                    Draw Furniture Placement Area
+                </div>
+                <div class="canvas-tools">
+                    <div class="tool-group">
+                        <label>Brush Size: 100px (Fixed)</label>
+                    </div>
+                    <div class="tool-group">
+                        <label>Opacity: 40% (Fixed)</label>
+                    </div>
+                    <div class="tool-group">
+                        <button class="btn btn-secondary" id="undoBtn">↶ Undo</button>
+                        <button class="btn btn-danger" id="clearBtn">🗑️ Clear All</button>
+                    </div>
+                </div>
+                <div class="canvas-container" id="canvasContainer" style="display: none;">
+                    <canvas id="drawingCanvas"></canvas>
+                    <div class="canvas-cursor" id="canvasCursor"></div>
+                </div>
+                <p style="color: #666; margin-top: 10px;">
+                    💡 Tip: Use the brush to draw light blue areas on the living room image to mark the furniture placement location
+                </p>
+            </div>
+
+            <!-- 步骤6: 生成效果图 -->
+            <div class="step" id="step6">
+                <div class="step-title">
+                    <div class="step-number">6</div>
+                    Generate Decoration Effect Image
+                </div>
+                <button class="btn" id="generateBtn" disabled>🎨 Generate Decoration Effect Image</button>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Generating decoration effect image, please wait...</p>
+                </div>
+
+                <div class="result-container" id="resultContainer">
+                    <!-- 生成的结果将显示在这里 -->
+                </div>
+            </div>
+
+            <!-- 消息提示 -->
+            <div class="message" id="message"></div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let uploadedImageFile = null;
+        let selectedFurniture = null;
+        let canvas = null;
+        let ctx = null;
+        let isDrawing = false;
+        let drawingHistory = [];
+        let currentStep = 1;
+        let canvasCursor = null;
+        let maskCanvas = null; // 用于存储mask图层的临时canvas
+        let maskCtx = null;
+        let roomLength = null; // 客厅长度（米）
+        let roomWidth = null;  // 客厅宽度（米）
+        let selectedStyle = null; // 选中的沙发风格
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeUpload();
+            initializeCanvas();
+            initializeButtons();
+            initializeStyleSelection();
+            initializeSizeButtons();
+        });
+        
+        // 初始化尺寸确认按钮（使用事件委托，确保动态元素也能响应）
+        function initializeSizeButtons() {
+            // 使用事件委托，监听整个文档的点击事件（作为备选方案）
+            document.addEventListener('click', function(e) {
+                // 确认尺寸按钮（识别失败时）
+                if (e.target && e.target.id === 'confirmSizeBtn') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('事件委托捕获到确认尺寸按钮点击');
+                    confirmSizeInput();
+                }
+                // 确认修改按钮（识别成功时）
+                if (e.target && e.target.id === 'confirmSizeBtnSuccess') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('事件委托捕获到确认修改按钮点击');
+                    confirmSizeModify();
+                }
+            });
+            
+            // 也尝试直接绑定（如果元素已存在）
+            setTimeout(() => {
+                const confirmBtn = document.getElementById('confirmSizeBtn');
+                const confirmBtnSuccess = document.getElementById('confirmSizeBtnSuccess');
+                
+                if (confirmBtn) {
+                    console.log('找到确认尺寸按钮，直接绑定事件');
+                    confirmBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('直接绑定的事件触发');
+                        confirmSizeInput();
+                    });
+                }
+                
+                if (confirmBtnSuccess) {
+                    console.log('找到确认修改按钮，直接绑定事件');
+                    confirmBtnSuccess.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('直接绑定的事件触发');
+                        confirmSizeModify();
+                    });
+                }
+            }, 500);
+        }
+
+        // 初始化上传功能
+        function initializeUpload() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('drop', handleDrop);
+            fileInput.addEventListener('change', handleFileSelect);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('Please select an image file', 'error');
+                return;
+            }
+
+            // 显示预览
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const previewImage = document.getElementById('previewImage');
+                previewImage.src = e.target.result;
+                document.getElementById('uploadedImage').style.display = 'block';
+                
+                // 上传文件
+                uploadFile(file);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // 显示上传和识别中的状态
+            const sizeLoading = document.getElementById('sizeLoading');
+            if (sizeLoading) {
+                sizeLoading.style.display = 'block';
+            }
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    uploadedImageFile = data.filename;
+                    showMessage('Living room image uploaded successfully, identifying dimensions...', 'success');
+                    
+                    // 处理尺寸识别结果
+                    if (data.size_detection) {
+                        handleSizeDetection(data.size_detection);
+                    } else {
+                        // 如果没有尺寸识别结果，直接进入下一步
+                        if (sizeLoading) {
+                            sizeLoading.style.display = 'none';
+                        }
+                        activateStep(2);
+                    }
+                } else {
+                    if (sizeLoading) {
+                        sizeLoading.style.display = 'none';
+                    }
+                    showMessage(data.error || 'Upload failed', 'error');
+                }
+            })
+            .catch(error => {
+                if (sizeLoading) {
+                    sizeLoading.style.display = 'none';
+                }
+                showMessage('Upload failed: ' + error.message, 'error');
+            });
+        }
+
+        // 计算适合摆放沙发的尺寸范围（与后端公式一致）
+        function calculateSofaSizeRange(roomLength, roomWidth) {
+            // 沙发长度：最大值 = 客厅长度 × 0.6，但不超过 3.5米
+            //           最小值 = 客厅长度 × 0.3，但不小于 1米
+            const sofaLengthMax = Math.min(roomLength * 0.6, 3.5);
+            const sofaLengthMin = Math.max(roomLength * 0.3, 1.0);
+            
+            // 沙发宽度：最大值 = 客厅宽度 × 0.3，但不超过 1米
+            //           最小值 = 客厅宽度 × 0.2，但不超过 0.7米
+            const sofaWidthMax = Math.min(roomWidth * 0.3, 1.0);
+            const sofaWidthMin = Math.min(roomWidth * 0.2, 0.7);
+            
+            return {
+                length: {
+                    min: parseFloat(sofaLengthMin.toFixed(2)),
+                    max: parseFloat(sofaLengthMax.toFixed(2))
+                },
+                width: {
+                    min: parseFloat(sofaWidthMin.toFixed(2)),
+                    max: parseFloat(sofaWidthMax.toFixed(2))
+                }
+            };
+        }
+        
+        // 更新沙发尺寸范围显示
+        function updateSofaSizeRangeDisplay(roomLength, roomWidth) {
+            const sofaRange = calculateSofaSizeRange(roomLength, roomWidth);
+            const sofaSizeRange = document.getElementById('sofaSizeRange');
+            const sofaLengthRange = document.getElementById('sofaLengthRange');
+            const sofaWidthRange = document.getElementById('sofaWidthRange');
+            
+            if (sofaSizeRange) {
+                sofaSizeRange.style.display = 'block';
+            }
+            if (sofaLengthRange) {
+                sofaLengthRange.textContent = `${sofaRange.length.min} - ${sofaRange.length.max}`;
+            }
+            if (sofaWidthRange) {
+                sofaWidthRange.textContent = `${sofaRange.width.min} - ${sofaRange.width.max}`;
+            }
+            
+            console.log('沙发尺寸范围已更新:', sofaRange);
+        }
+
+        // 将函数暴露到全局作用域，以便onclick可以访问
+        window.confirmSizeInput = function() {
+            console.log('=== confirmSizeInput 被调用 ===');
+            const lengthInput = document.getElementById('manualLengthError');
+            const widthInput = document.getElementById('manualWidthError');
+            const errorMsg = document.getElementById('sizeInputError');
+            
+            console.log('lengthInput:', lengthInput);
+            console.log('widthInput:', widthInput);
+            
+            if (!lengthInput || !widthInput) {
+                console.error('找不到输入框元素');
+                showMessage('System error: Input fields not found', 'error');
+                return false;
+            }
+            
+            const length = parseFloat(lengthInput.value);
+            const width = parseFloat(widthInput.value);
+            
+            console.log('输入的尺寸 - 长度:', length, '宽度:', width);
+            console.log('长度值类型:', typeof length, '是否NaN:', isNaN(length));
+            console.log('宽度值类型:', typeof width, '是否NaN:', isNaN(width));
+            
+            // 验证输入
+            if (!length || length <= 0 || isNaN(length)) {
+                console.warn('长度验证失败');
+                if (errorMsg) {
+                    errorMsg.textContent = 'Please enter a valid length (greater than 0)';
+                    errorMsg.style.display = 'block';
+                }
+                showMessage('Please enter a valid length (greater than 0)', 'error');
+                return false;
+            }
+            if (!width || width <= 0 || isNaN(width)) {
+                console.warn('宽度验证失败');
+                if (errorMsg) {
+                    errorMsg.textContent = 'Please enter a valid width (greater than 0)';
+                    errorMsg.style.display = 'block';
+                }
+                showMessage('Please enter a valid width (greater than 0)', 'error');
+                return false;
+            }
+            
+            // 保存尺寸
+            roomLength = length;
+            roomWidth = width;
+            if (errorMsg) {
+                errorMsg.style.display = 'none';
+            }
+            
+            // 更新沙发尺寸范围显示
+            updateSofaSizeRangeDisplay(length, width);
+            
+            console.log('✓ 尺寸已保存 - 长度:', roomLength, '宽度:', roomWidth);
+            showMessage(`Dimensions confirmed: Length=${length.toFixed(2)}m, Width=${width.toFixed(2)}m`, 'success');
+            
+            // 自动进入下一步
+            setTimeout(() => {
+                console.log('进入步骤3');
+                activateStep(3);
+            }, 500);
+            
+            return false; // 防止表单提交
+        };
+        
+        // 保留原来的函数定义（向后兼容）
+        function confirmSizeInput() {
+            return window.confirmSizeInput();
+        }
+
+        // 将函数暴露到全局作用域
+        window.confirmSizeModify = function() {
+            console.log('=== confirmSizeModify 被调用 ===');
+            const lengthInput = document.getElementById('manualLength');
+            const widthInput = document.getElementById('manualWidth');
+            const errorMsg = document.getElementById('sizeInputErrorSuccess');
+            
+            console.log('lengthInput:', lengthInput);
+            console.log('widthInput:', widthInput);
+            
+            if (!lengthInput || !widthInput) {
+                console.error('找不到输入框元素');
+                showMessage('System error: Input fields not found', 'error');
+                return false;
+            }
+            
+            const length = parseFloat(lengthInput.value);
+            const width = parseFloat(widthInput.value);
+            
+            console.log('输入的尺寸 - 长度:', length, '宽度:', width);
+            
+            // 验证输入
+            if (!length || length <= 0 || isNaN(length)) {
+                console.warn('长度验证失败');
+                if (errorMsg) {
+                    errorMsg.textContent = 'Please enter a valid length (greater than 0)';
+                    errorMsg.style.display = 'block';
+                }
+                showMessage('Please enter a valid length (greater than 0)', 'error');
+                return false;
+            }
+            if (!width || width <= 0 || isNaN(width)) {
+                console.warn('宽度验证失败');
+                if (errorMsg) {
+                    errorMsg.textContent = 'Please enter a valid width (greater than 0)';
+                    errorMsg.style.display = 'block';
+                }
+                showMessage('Please enter a valid width (greater than 0)', 'error');
+                return false;
+            }
+            
+            // 保存尺寸并更新显示
+            roomLength = length;
+            roomWidth = width;
+            
+            const detectedLengthEl = document.getElementById('detectedLength');
+            const detectedWidthEl = document.getElementById('detectedWidth');
+            
+            if (detectedLengthEl) {
+                detectedLengthEl.textContent = length.toFixed(2);
+            }
+            if (detectedWidthEl) {
+                detectedWidthEl.textContent = width.toFixed(2);
+            }
+            if (errorMsg) {
+                errorMsg.style.display = 'none';
+            }
+            
+            // 更新沙发尺寸范围显示
+            updateSofaSizeRangeDisplay(length, width);
+            
+            console.log('✓ 尺寸已更新 - 长度:', roomLength, '宽度:', roomWidth);
+            showMessage(`Dimensions updated: Length=${length.toFixed(2)}m, Width=${width.toFixed(2)}m, sofa size range automatically updated`, 'success');
+            
+            return false; // 防止表单提交
+        };
+        
+        // 保留原来的函数定义（向后兼容）
+        function confirmSizeModify() {
+            return window.confirmSizeModify();
+        }
+
+        function handleSizeDetection(sizeResult) {
+            console.log('处理尺寸识别结果:', sizeResult);
+            
+            const sizeLoading = document.getElementById('sizeLoading');
+            const sizeResultDiv = document.getElementById('sizeResult');
+            const sizeError = document.getElementById('sizeError');
+            
+            sizeLoading.style.display = 'none';
+            
+            if (sizeResult.success) {
+                // 识别成功（可能是估算值）
+                roomLength = sizeResult.length;
+                roomWidth = sizeResult.width;
+                
+                document.getElementById('detectedLength').textContent = roomLength.toFixed(2);
+                document.getElementById('detectedWidth').textContent = roomWidth.toFixed(2);
+                
+                // 设置手动输入框的默认值
+                document.getElementById('manualLength').value = roomLength.toFixed(2);
+                document.getElementById('manualWidth').value = roomWidth.toFixed(2);
+                
+                // 显示估算值提示
+                const estimatedBadge = document.getElementById('estimatedBadge');
+                if (sizeResult.is_estimated) {
+                    if (estimatedBadge) {
+                        estimatedBadge.style.display = 'block';
+                    }
+                    showMessage('Room dimensions estimated based on image, please confirm or modify', 'success');
+                } else {
+                    if (estimatedBadge) {
+                        estimatedBadge.style.display = 'none';
+                    }
+                    showMessage('Living room dimensions identified successfully, you can continue or modify dimensions', 'success');
+                }
+                
+                // 显示适合摆放沙发的尺寸范围
+                if (sizeResult.sofa_length_range && sizeResult.sofa_width_range) {
+                    const sofaSizeRange = document.getElementById('sofaSizeRange');
+                    const sofaLengthRange = document.getElementById('sofaLengthRange');
+                    const sofaWidthRange = document.getElementById('sofaWidthRange');
+                    
+                    if (sofaSizeRange) {
+                        sofaSizeRange.style.display = 'block';
+                    }
+                    if (sofaLengthRange) {
+                        sofaLengthRange.textContent = `${sizeResult.sofa_length_range.min} - ${sizeResult.sofa_length_range.max}`;
+                    }
+                    if (sofaWidthRange) {
+                        sofaWidthRange.textContent = `${sizeResult.sofa_width_range.min} - ${sizeResult.sofa_width_range.max}`;
+                    }
+                    
+                    console.log('沙发尺寸范围:', sizeResult.sofa_length_range, sizeResult.sofa_width_range);
+                }
+                
+                sizeResultDiv.style.display = 'block';
+                sizeError.style.display = 'none';
+                
+                // 自动进入下一步（给用户一点时间查看结果）
+                setTimeout(() => {
+                    activateStep(3);
+                }, 1500);
+            } else {
+                // 识别失败，显示错误信息和手动输入
+                document.getElementById('sizeErrorMessage').textContent = sizeResult.error || 'Unable to automatically identify dimensions';
+                sizeError.style.display = 'block';
+                sizeResultDiv.style.display = 'none';
+            }
+        }
+
+        // 初始化风格选择（使用事件委托）
+        function initializeStyleSelection() {
+            // 使用事件委托，确保动态加载的元素也能响应
+            document.addEventListener('click', function(e) {
+                // 检查是否点击了风格按钮
+                if (e.target && e.target.classList.contains('style-btn')) {
+                    const btn = e.target;
+                    
+                    // 检查是否已输入房间尺寸
+                    if (!roomLength || !roomWidth) {
+                        showMessage('Please confirm living room dimensions first', 'error');
+                        activateStep(2);
+                        return;
+                    }
+                    
+                    // 移除其他按钮的选中状态
+                    const allStyleButtons = document.querySelectorAll('.style-btn');
+                    allStyleButtons.forEach(b => {
+                        b.style.opacity = '1';
+                        b.style.transform = 'scale(1)';
+                        b.style.background = '#667eea';
+                        b.style.border = 'none';
+                    });
+                    
+                    // 选中当前按钮
+                    btn.style.opacity = '1';
+                    btn.style.transform = 'scale(0.95)';
+                    btn.style.background = '#764ba2';
+                    btn.style.border = '2px solid #764ba2';
+                    
+                    selectedStyle = btn.getAttribute('data-style');
+                    const styleName = btn.textContent.trim();
+                    
+                    const selectedStyleNameEl = document.getElementById('selectedStyleName');
+                    const selectedStyleTextEl = document.getElementById('selectedStyleText');
+                    
+                    if (selectedStyleNameEl) {
+                        selectedStyleNameEl.textContent = styleName;
+                    }
+                    if (selectedStyleTextEl) {
+                        selectedStyleTextEl.style.display = 'block';
+                    }
+                    
+                    showMessage(`Style selected: ${styleName}, loading sofas...`, 'success');
+                    
+                    // 加载对应风格的沙发
+                    loadFurnitureList(selectedStyle);
+                    activateStep(4);
+                }
+            });
+        }
+
+        // 加载家具列表（根据风格和尺寸过滤）
+        function loadFurnitureList(style = null) {
+            let url = '/furniture?';
+            if (style) {
+                url += `style=${style}&`;
+            }
+            if (roomLength && roomWidth) {
+                url += `room_length=${roomLength}&room_width=${roomWidth}&`;
+            }
+            
+            fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.furniture) {
+                    if (data.furniture.length === 0) {
+                        showMessage('No sofas found matching the requirements, please try another style', 'error');
+                    } else {
+                        displayFurnitureList(data.furniture);
+                    }
+                } else {
+                    showMessage('Failed to load furniture list', 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('Failed to load furniture list: ' + error.message, 'error');
+            });
+        }
+
+        function displayFurnitureList(furnitureList) {
+            const grid = document.getElementById('furnitureGrid');
+            grid.innerHTML = '';
+
+            furnitureList.forEach(furniture => {
+                const item = document.createElement('div');
+                item.className = 'furniture-item';
+                item.innerHTML = `
+                    <img src="${furniture.path}" alt="${furniture.display_name || furniture.name}">
+                    <div>${furniture.display_name || furniture.name}</div>
+                `;
+                
+                item.addEventListener('click', () => selectFurniture(furniture, item));
+                grid.appendChild(item);
+            });
+        }
+
+        function selectFurniture(furniture, element) {
+            console.log('选择家具:', furniture);
+            
+            // 清除之前的选择
+            document.querySelectorAll('.furniture-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // 选择当前家具
+            element.classList.add('selected');
+            selectedFurniture = furniture;
+            
+            showMessage(`Furniture selected: ${furniture.display_name || furniture.name}`, 'success');
+            
+            // 进入步骤5（涂画放置区域）
+            console.log('进入步骤5 - 涂画放置区域');
+            activateStep(5);
+            
+            // 延迟一点时间再设置canvas，确保DOM已更新
+            setTimeout(() => {
+                setupCanvas();
+            }, 100);
+        }
+
+        // 初始化画布（延迟初始化，只在需要时初始化）
+        function initializeCanvas() {
+            canvas = document.getElementById('drawingCanvas');
+            
+            // 如果canvas元素不存在，延迟初始化
+            if (!canvas) {
+                console.log('Canvas元素尚未加载，将在需要时初始化');
+                return;
+            }
+            
+            try {
+                ctx = canvas.getContext('2d');
+                canvasCursor = document.getElementById('canvasCursor');
+                
+                // 创建mask图层canvas
+                maskCanvas = document.createElement('canvas');
+                maskCtx = maskCanvas.getContext('2d');
+                
+                // 设置画笔样式
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.globalAlpha = 1.0; // 初始透明度为1
+                
+                // 绑定事件
+                canvas.addEventListener('mousedown', startDrawing);
+                canvas.addEventListener('mousemove', handleMouseMove);
+                canvas.addEventListener('mouseup', stopDrawing);
+                canvas.addEventListener('mouseout', hideCanvasCursor);
+                canvas.addEventListener('mouseenter', showCanvasCursor);
+                
+                // 触摸事件支持
+                canvas.addEventListener('touchstart', handleTouch);
+                canvas.addEventListener('touchmove', handleTouch);
+                canvas.addEventListener('touchend', stopDrawing);
+                
+                console.log('Canvas初始化成功');
+            } catch (error) {
+                console.error('Canvas初始化失败:', error);
+            }
+        }
+
+        function setupCanvas() {
+            if (!uploadedImageFile) return;
+            
+            // 确保canvas已初始化
+            if (!canvas || !ctx) {
+                initializeCanvas();
+            }
+            
+            // 如果仍然无法初始化，说明canvas元素不存在
+            if (!canvas || !ctx) {
+                console.error('无法初始化canvas，元素可能不存在');
+                showMessage('Unable to initialize canvas, please refresh the page and try again', 'error');
+                return;
+            }
+            
+            const previewImage = document.getElementById('previewImage');
+            const canvasContainer = document.getElementById('canvasContainer');
+            
+            // 设置画布尺寸
+            canvas.width = previewImage.naturalWidth;
+            canvas.height = previewImage.naturalHeight;
+            
+            // 设置mask canvas尺寸
+            if (!maskCanvas || !maskCtx) {
+                maskCanvas = document.createElement('canvas');
+                maskCtx = maskCanvas.getContext('2d');
+            }
+            maskCanvas.width = canvas.width;
+            maskCanvas.height = canvas.height;
+            
+            // 设置显示尺寸
+            const maxWidth = 800;
+            const maxHeight = 600;
+            let displayWidth = canvas.width;
+            let displayHeight = canvas.height;
+            
+            if (displayWidth > maxWidth) {
+                displayHeight = (displayHeight * maxWidth) / displayWidth;
+                displayWidth = maxWidth;
+            }
+            
+            if (displayHeight > maxHeight) {
+                displayWidth = (displayWidth * maxHeight) / displayHeight;
+                displayHeight = maxHeight;
+            }
+            
+            canvas.style.width = displayWidth + 'px';
+            canvas.style.height = displayHeight + 'px';
+            
+            // 绘制背景图片
+            const img = new Image();
+            img.onload = function() {
+                ctx.globalAlpha = 1.0; // 确保背景图片完全不透明
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                saveState();
+                
+                // 清空mask canvas
+                maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+            };
+            img.src = previewImage.src;
+            
+            canvasContainer.style.display = 'block';
+        }
+
+        function updateCanvasCursor(e) {
+            if (!canvasCursor) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const brushSize = 100; // 固定画笔大小100px
+            
+            // 更新光标位置和大小
+            const cursorSize = brushSize * (rect.width / canvas.width); // 根据canvas缩放调整光标大小
+            canvasCursor.style.width = cursorSize + 'px';
+            canvasCursor.style.height = cursorSize + 'px';
+            canvasCursor.style.left = (e.clientX - rect.left - cursorSize/2) + 'px';
+            canvasCursor.style.top = (e.clientY - rect.top - cursorSize/2) + 'px';
+            
+            // 更新光标透明度预览 (固定40%透明度)
+            canvasCursor.style.background = `rgba(0, 123, 255, 0.12)`; // 40% * 0.3 = 0.12
+        }
+
+        function showCanvasCursor() {
+            if (canvasCursor) {
+                canvasCursor.style.display = 'block';
+            }
+        }
+
+        function hideCanvasCursor() {
+            if (canvasCursor) {
+                canvasCursor.style.display = 'none';
+            }
+        }
+
+        function handleMouseMove(e) {
+            updateCanvasCursor(e);
+            if (isDrawing) {
+                drawCircle(e);
+            }
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            saveState();
+            drawCircle(e);
+        }
+
+        function drawCircle(e) {
+            if (!isDrawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            const brushSize = 100; // 固定画笔大小100px
+            const radius = brushSize / 2;
+            
+            // 在mask canvas上绘制不透明的蓝色
+            maskCtx.globalCompositeOperation = 'source-over';
+            maskCtx.globalAlpha = 1.0; // mask上始终不透明
+            maskCtx.fillStyle = 'rgb(0, 123, 255)';
+            
+            maskCtx.beginPath();
+            maskCtx.arc(x, y, radius, 0, 2 * Math.PI);
+            maskCtx.fill();
+            
+            // 重新绘制整个canvas
+            redrawCanvas();
+        }
+
+        function redrawCanvas() {
+            // 清除主canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 重新绘制背景图片
+            if (drawingHistory.length > 0) {
+                ctx.putImageData(drawingHistory[0], 0, 0);
+            }
+            
+            // 以固定40%透明度绘制mask
+            ctx.globalAlpha = 0.4; // 固定40%透明度
+            ctx.drawImage(maskCanvas, 0, 0);
+            ctx.globalAlpha = 1.0; // 恢复透明度
+        }
+
+        function stopDrawing() {
+            if (isDrawing) {
+                isDrawing = false;
+                ctx.globalAlpha = 1.0; // 恢复透明度
+                checkCanGenerate();
+            }
+        }
+
+        function handleTouch(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : 
+                                            e.type === 'touchmove' ? 'mousemove' : 'mouseup', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            
+            if (e.type === 'touchstart') {
+                startDrawing(mouseEvent);
+            } else if (e.type === 'touchmove') {
+                handleMouseMove(mouseEvent);
+            } else if (e.type === 'touchend') {
+                stopDrawing();
+            }
+        }
+
+        function saveState() {
+            drawingHistory.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            if (drawingHistory.length > 20) {
+                drawingHistory.shift();
+            }
+        }
+
+        function undo() {
+            if (drawingHistory.length > 1) {
+                drawingHistory.pop();
+                const previousState = drawingHistory[drawingHistory.length - 1];
+                ctx.putImageData(previousState, 0, 0);
+            }
+        }
+
+        function clearCanvas() {
+            if (drawingHistory.length > 0) {
+                const originalState = drawingHistory[0];
+                ctx.putImageData(originalState, 0, 0);
+                drawingHistory = [originalState];
+                
+                // 清空mask canvas
+                maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+            }
+        }
+
+        // 初始化按钮事件（延迟初始化，只在元素存在时绑定）
+        function initializeButtons() {
+            // 使用事件委托，避免元素不存在的问题
+            document.addEventListener('click', function(e) {
+                // 撤销按钮
+                if (e.target && e.target.id === 'undoBtn') {
+                    e.preventDefault();
+                    undo();
+                }
+                // 清除按钮
+                if (e.target && e.target.id === 'clearBtn') {
+                    e.preventDefault();
+                    clearCanvas();
+                }
+                // 生成按钮
+                if (e.target && e.target.id === 'generateBtn') {
+                    e.preventDefault();
+                    generateDecoration();
+                }
+            });
+            
+            // 也尝试直接绑定（如果元素已存在）
+            setTimeout(() => {
+                const undoBtn = document.getElementById('undoBtn');
+                const clearBtn = document.getElementById('clearBtn');
+                const generateBtn = document.getElementById('generateBtn');
+                
+                if (undoBtn) {
+                    undoBtn.addEventListener('click', undo);
+                    console.log('撤销按钮事件已绑定');
+                }
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', clearCanvas);
+                    console.log('清除按钮事件已绑定');
+                }
+                if (generateBtn) {
+                    generateBtn.addEventListener('click', generateDecoration);
+                    console.log('生成按钮事件已绑定');
+                }
+            }, 500);
+        }
+
+        // 检查是否可以生成
+        function checkCanGenerate() {
+            const canGenerate = uploadedImageFile && selectedFurniture && drawingHistory.length > 1;
+            const generateBtn = document.getElementById('generateBtn');
+            if (generateBtn) {
+                generateBtn.disabled = !canGenerate;
+            }
+            
+            if (canGenerate) {
+                activateStep(6);
+            }
+        }
+
+        // 激活步骤
+        function activateStep(stepNumber) {
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active');
+            });
+            const targetStep = document.getElementById(`step${stepNumber}`);
+            if (targetStep) {
+                targetStep.classList.add('active');
+                currentStep = stepNumber;
+                
+                // 滚动到当前步骤
+                targetStep.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        // 生成装修效果图
+        function generateDecoration() {
+            if (!uploadedImageFile || !selectedFurniture) {
+                showMessage('Please complete the previous steps', 'error');
+                return;
+            }
+            
+            // 显示加载状态
+            const loadingEl = document.getElementById('loading');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            if (loadingEl) {
+                loadingEl.classList.add('show');
+            }
+            if (generateBtn) {
+                generateBtn.disabled = true;
+            }
+            
+            // 获取mask数据 - 使用固定40%透明度
+            const brushOpacity = 0.4; // 固定40%透明度
+            
+            // 创建一个临时canvas来生成带透明度的mask
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = maskCanvas.width;
+            tempCanvas.height = maskCanvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // 在临时canvas上以固定40%透明度绘制mask
+            tempCtx.globalAlpha = brushOpacity;
+            tempCtx.drawImage(maskCanvas, 0, 0);
+            
+            // 获取应用了透明度的mask数据
+            const maskData = tempCanvas.toDataURL('image/png');
+            
+            console.log(`保存mask数据，固定透明度设置: 40%`);
+            console.log(`Mask数据长度: ${maskData.length}`);
+            
+            // 先保存mask图片
+            fetch('/save_mask', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    original_image: uploadedImageFile,
+                    mask_data: maskData
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 调用生成API
+                    return fetch('/generate_v1', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            original_image: uploadedImageFile,
+                            selected_furniture: selectedFurniture.name,
+                            mask_filename: data.mask_filename
+                        })
+                    });
+                } else {
+                    throw new Error(data.error || '保存mask失败');
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const loadingEl = document.getElementById('loading');
+                const generateBtn = document.getElementById('generateBtn');
+                
+                if (loadingEl) {
+                    loadingEl.classList.remove('show');
+                }
+                if (generateBtn) {
+                    generateBtn.disabled = false;
+                }
+                
+                if (data.success) {
+                    displayResults(data.generated_images);
+                    showMessage(data.message, 'success');
+                } else {
+                    showMessage(data.error || 'Generation failed', 'error');
+                }
+            })
+            .catch(error => {
+                const loadingEl = document.getElementById('loading');
+                const generateBtn = document.getElementById('generateBtn');
+                
+                if (loadingEl) {
+                    loadingEl.classList.remove('show');
+                }
+                if (generateBtn) {
+                    generateBtn.disabled = false;
+                }
+                showMessage('Generation failed: ' + error.message, 'error');
+            });
+        }
+
+        // 显示结果
+        function displayResults(images) {
+            const container = document.getElementById('resultContainer');
+            container.innerHTML = '<h3>🎉 Generation Successful!</h3>';
+            
+            images.forEach((image, index) => {
+                const imgElement = document.createElement('img');
+                imgElement.src = image.path;
+                imgElement.className = 'result-image';
+                imgElement.style.margin = '20px 10px';
+                container.appendChild(imgElement);
+                
+                // 添加下载链接
+                const downloadLink = document.createElement('a');
+                downloadLink.href = image.path;
+                downloadLink.download = image.filename;
+                downloadLink.className = 'btn';
+                downloadLink.style.margin = '10px';
+                downloadLink.textContent = `Download Image ${index + 1}`;
+                container.appendChild(downloadLink);
+            });
+        }
+
+        // 显示消息
+        function showMessage(text, type = 'success') {
+            const message = document.getElementById('message');
+            message.textContent = text;
+            message.className = `message ${type} show`;
+            
+            setTimeout(() => {
+                message.classList.remove('show');
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
