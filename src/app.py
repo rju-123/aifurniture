@@ -73,6 +73,98 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def compress_image(image_path, max_size_mb=1.0, quality=85):
+    """
+    压缩图片到指定大小以下
+    
+    参数:
+        image_path: 图片文件路径
+        max_size_mb: 最大文件大小（MB），默认1MB
+        quality: JPEG质量（1-100），默认85
+    
+    返回:
+        bool: 是否进行了压缩
+    """
+    max_size_bytes = max_size_mb * 1024 * 1024  # 转换为字节
+    
+    # 检查文件大小
+    if not os.path.exists(image_path):
+        return False
+    
+    file_size = os.path.getsize(image_path)
+    if file_size <= max_size_bytes:
+        log_project(f"图片大小 {file_size/1024/1024:.2f}MB，无需压缩")
+        return False
+    
+    log_project(f"图片大小 {file_size/1024/1024:.2f}MB，开始压缩...")
+    
+    try:
+        # 打开图片
+        with Image.open(image_path) as img:
+            # 转换为RGB模式（JPEG不支持透明度）
+            if img.mode in ('RGBA', 'LA', 'P'):
+                # 创建白色背景
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # 获取原始尺寸
+            original_size = img.size
+            original_quality = quality
+            
+            # 尝试不同的压缩策略
+            temp_path = image_path + '.tmp'
+            
+            # 策略1: 先尝试只调整质量
+            for q in range(quality, 20, -10):  # 从85降到20，每次减10
+                img.save(temp_path, 'JPEG', quality=q, optimize=True)
+                if os.path.getsize(temp_path) <= max_size_bytes:
+                    os.replace(temp_path, image_path)
+                    log_project(f"压缩成功: {file_size/1024/1024:.2f}MB -> {os.path.getsize(image_path)/1024/1024:.2f}MB (质量={q})")
+                    return True
+            
+            # 策略2: 如果质量压缩不够，调整尺寸
+            scale_factor = 0.9
+            current_size = original_size
+            
+            while scale_factor >= 0.5:  # 最小缩放到50%
+                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+                resized_img = img.resize(new_size, Image.Resampling.LANCZOS)
+                
+                # 尝试不同的质量
+                for q in range(quality, 30, -10):
+                    resized_img.save(temp_path, 'JPEG', quality=q, optimize=True)
+                    if os.path.getsize(temp_path) <= max_size_bytes:
+                        os.replace(temp_path, image_path)
+                        log_project(f"压缩成功: {file_size/1024/1024:.2f}MB -> {os.path.getsize(image_path)/1024/1024:.2f}MB (尺寸={new_size}, 质量={q})")
+                        return True
+                
+                scale_factor -= 0.1
+            
+            # 如果还是太大，使用最小尺寸和最低质量
+            min_size = (int(original_size[0] * 0.5), int(original_size[1] * 0.5))
+            final_img = img.resize(min_size, Image.Resampling.LANCZOS)
+            final_img.save(temp_path, 'JPEG', quality=30, optimize=True)
+            os.replace(temp_path, image_path)
+            
+            final_size = os.path.getsize(image_path)
+            log_project(f"压缩完成: {file_size/1024/1024:.2f}MB -> {final_size/1024/1024:.2f}MB (最小尺寸={min_size}, 质量=30)")
+            return True
+            
+    except Exception as e:
+        log_project(f"图片压缩失败: {str(e)}")
+        # 如果压缩失败，删除临时文件
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+        return False
+
 def log_project(message):
     """记录项目日志"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -931,12 +1023,23 @@ def upload_file():
             # 保存文件
             try:
                 file.save(filepath)
+                
+                # 检查文件大小，如果大于1MB则压缩
+                file_size = os.path.getsize(filepath)
+                log_project(f"用户上传客厅图片: {unique_filename}, 大小: {file_size/1024/1024:.2f}MB")
+                
+                if file_size > 1024 * 1024:  # 大于1MB
+                    log_project(f"图片大小超过1MB，开始压缩...")
+                    compressed = compress_image(filepath, max_size_mb=1.0, quality=85)
+                    if compressed:
+                        new_size = os.path.getsize(filepath)
+                        log_project(f"压缩完成: {file_size/1024/1024:.2f}MB -> {new_size/1024/1024:.2f}MB")
+                    else:
+                        log_project(f"压缩失败或未进行压缩")
+                
             except Exception as e:
                 log_project(f"保存文件失败: {str(e)}")
                 return jsonify({'error': f'保存文件失败: {str(e)}'}), 500
-            
-            # 记录日志
-            log_project(f"用户上传客厅图片: {unique_filename}")
             
             # 调用百度智能云API识别客厅尺寸
             size_result = call_baidu_room_size_api(filepath)
