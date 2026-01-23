@@ -51,6 +51,21 @@ app.config['OUTPUT_FOLDER'] = os.path.join(BASE_DIR, 'data', 'output')
 app.config['MASK_FOLDER'] = os.path.join(BASE_DIR, 'data', 'masks')  # 新增：存储mask图片
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# 确保必要的目录存在（在模块加载时执行，适用于 Gunicorn）
+# 这样无论是直接运行还是通过 Gunicorn 启动，目录都会被创建
+for folder in [
+    app.config['UPLOAD_FOLDER'],
+    app.config['FURNITURE_FOLDER'],
+    app.config['OUTPUT_FOLDER'],
+    app.config['MASK_FOLDER'],
+    os.path.join(BASE_DIR, 'project_log')
+]:
+    try:
+        os.makedirs(folder, exist_ok=True)
+        print(f"✓ 确保目录存在: {folder}")
+    except Exception as e:
+        print(f"✗ 创建目录失败 {folder}: {str(e)}")
+
 # 允许的文件扩展名
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
@@ -61,10 +76,23 @@ def allowed_file(filename):
 def log_project(message):
     """记录项目日志"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_file = os.path.join(BASE_DIR, 'project_log', 'project.log')
+    log_dir = os.path.join(BASE_DIR, 'project_log')
+    log_file = os.path.join(log_dir, 'project.log')
     
-    with open(log_file, 'a', encoding='utf-8') as f:
-        f.write(f"[{timestamp}] {message}\n")
+    # 确保日志目录存在（双重保险）
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except Exception as e:
+        print(f"[警告] 无法创建日志目录 {log_dir}: {str(e)}")
+        return
+    
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except Exception as e:
+        # 如果日志写入失败，至少打印到控制台
+        print(f"[日志写入失败] [{timestamp}] {message}")
+        print(f"[错误] {str(e)}")
 
 def encode_file_to_base64(file_path):
     """将本地图片文件转换为 Base64 Data URL"""
@@ -887,13 +915,25 @@ def upload_file():
             return jsonify({'error': '没有选择文件'}), 400
         
         if file and allowed_file(file.filename):
+            # 确保上传目录存在（双重保险）
+            upload_folder = app.config['UPLOAD_FOLDER']
+            try:
+                os.makedirs(upload_folder, exist_ok=True)
+            except Exception as e:
+                log_project(f"创建上传目录失败: {str(e)}")
+                return jsonify({'error': '无法创建上传目录'}), 500
+            
             # 生成唯一文件名
             filename = secure_filename(file.filename)
             unique_filename = f"{uuid.uuid4()}_{filename}"
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            filepath = os.path.join(upload_folder, unique_filename)
             
             # 保存文件
-            file.save(filepath)
+            try:
+                file.save(filepath)
+            except Exception as e:
+                log_project(f"保存文件失败: {str(e)}")
+                return jsonify({'error': f'保存文件失败: {str(e)}'}), 500
             
             # 记录日志
             log_project(f"用户上传客厅图片: {unique_filename}")
@@ -1178,19 +1218,8 @@ def generate_decoration_v1():
         return jsonify({'error': error_msg}), 500
 
 if __name__ == '__main__':
-    # 确保必要的目录存在
-    for folder in [app.config['UPLOAD_FOLDER'], app.config['FURNITURE_FOLDER'], 
-                   app.config['OUTPUT_FOLDER'], app.config['MASK_FOLDER']]:
-        os.makedirs(folder, exist_ok=True)
-        print(f"确保目录存在: {folder}")
-    
-    # 确保日志目录存在
-    log_dirs = [
-        os.path.join(BASE_DIR, 'project_log')
-    ]
-    for log_dir in log_dirs:
-        os.makedirs(log_dir, exist_ok=True)
-        print(f"确保日志目录存在: {log_dir}")
+    # 目录已在模块级别创建，这里只是确认（用于直接运行时的日志输出）
+    print("目录检查完成（已在模块级别创建）")
     
     # 检查豆包SDK可用性
     if DOUBAO_AVAILABLE:
