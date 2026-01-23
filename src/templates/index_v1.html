@@ -1421,7 +1421,20 @@
                     mask_data: maskData
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                // 检查响应状态
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                // 检查响应内容类型
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    return response.text().then(text => {
+                        throw new Error(`Expected JSON but got: ${contentType}. Response: ${text.substring(0, 200)}`);
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     // 调用生成API
@@ -1437,10 +1450,34 @@
                         })
                     });
                 } else {
-                    throw new Error(data.error || '保存mask失败');
+                    throw new Error(data.error || 'Failed to save mask');
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                // 检查响应状态
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        let errorMsg = `HTTP error! status: ${response.status}`;
+                        try {
+                            // 尝试解析为JSON
+                            const errorData = JSON.parse(text);
+                            errorMsg = errorData.error || errorMsg;
+                        } catch (e) {
+                            // 如果不是JSON，使用原始文本
+                            errorMsg = text || errorMsg;
+                        }
+                        throw new Error(errorMsg);
+                    });
+                }
+                // 检查响应内容类型
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    return response.text().then(text => {
+                        throw new Error(`Expected JSON but got: ${contentType}. Response: ${text.substring(0, 200)}`);
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
                 const loadingEl = document.getElementById('loading');
                 const generateBtn = document.getElementById('generateBtn');
@@ -1469,7 +1506,10 @@
                 if (generateBtn) {
                     generateBtn.disabled = false;
                 }
-                showMessage('Generation failed: ' + error.message, 'error');
+                
+                console.error('Generation error:', error);
+                const errorMessage = error.message || 'Generation failed';
+                showMessage('Generation failed: ' + errorMessage, 'error');
             });
         }
 

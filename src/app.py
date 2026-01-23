@@ -26,6 +26,21 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 
+# 全局错误处理器 - 确保所有错误都返回JSON格式
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error', 'message': str(error)}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """处理所有未捕获的异常，确保返回JSON格式"""
+    log_project(f"未捕获的异常: {str(e)}")
+    return jsonify({'error': 'An error occurred', 'message': str(e)}), 500
+
 # 获取项目根目录
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
