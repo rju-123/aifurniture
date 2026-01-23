@@ -3,7 +3,7 @@ services:
     name: ai-decoration
     env: python
     buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
-    startCommand: python src/app.py
+    startCommand: gunicorn -c gunicorn_config.py src.app:app
     envVars:
       - key: PORT
         value: 5423

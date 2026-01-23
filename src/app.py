@@ -665,7 +665,12 @@ def save_mask_image(original_image_filename, mask_data):
                     temp_mask = temp_mask.convert('RGBA')
                 
                 # 分析前100个非透明像素的alpha值
-                pixels = list(temp_mask.getdata())
+                # 使用新的 get_flattened_data() 方法（Pillow 10.0+）
+                try:
+                    pixels = list(temp_mask.get_flattened_data())
+                except AttributeError:
+                    # 兼容旧版本 Pillow
+                    pixels = list(temp_mask.getdata())
                 non_transparent_pixels = [(i, pixel) for i, pixel in enumerate(pixels) if pixel[3] > 0]
                 
                 log_project(f"内存分析: 总像素={len(pixels)}, 非透明像素={len(non_transparent_pixels)}")
@@ -723,7 +728,12 @@ def save_mask_image(original_image_filename, mask_data):
                         mask_img = mask_img.convert('RGBA')
                     
                     # 分析mask的透明度信息
-                    mask_pixels = list(mask_img.getdata())
+                    # 使用新的 get_flattened_data() 方法（Pillow 10.0+）
+                    try:
+                        mask_pixels = list(mask_img.get_flattened_data())
+                    except AttributeError:
+                        # 兼容旧版本 Pillow
+                        mask_pixels = list(mask_img.getdata())
                     alpha_values = [pixel[3] for pixel in mask_pixels if pixel[3] > 0]  # 非透明像素的alpha值
                     avg_alpha = sum(alpha_values) / len(alpha_values) if alpha_values else 0
                     transparency_percentage = round((255 - avg_alpha) / 255 * 100, 2) if avg_alpha > 0 else 100
@@ -734,8 +744,14 @@ def save_mask_image(original_image_filename, mask_data):
                     composite_img = original_img.copy()
                     
                     # 获取像素数据进行手动混合
-                    original_pixels = list(original_img.getdata())
-                    mask_pixels = list(mask_img.getdata())
+                    # 使用新的 get_flattened_data() 方法（Pillow 10.0+）
+                    try:
+                        original_pixels = list(original_img.get_flattened_data())
+                        mask_pixels = list(mask_img.get_flattened_data())
+                    except AttributeError:
+                        # 兼容旧版本 Pillow
+                        original_pixels = list(original_img.getdata())
+                        mask_pixels = list(mask_img.getdata())
                     
                     # 手动混合像素，正确处理用户设置的透明度
                     blended_pixels = []
@@ -1193,5 +1209,9 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5423))
     debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     
-    print(f"启动AI装修应用 v1.0 on port {port}")
+    # 如果是生产环境，强制关闭debug模式
+    if os.getenv('FLASK_ENV') == 'production':
+        debug = False
+    
+    print(f"启动AI装修应用 v1.0 on port {port}, debug={debug}")
     app.run(debug=debug, host='0.0.0.0', port=port)
