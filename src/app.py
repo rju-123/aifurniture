@@ -186,8 +186,76 @@ def log_project(message):
         print(f"[日志写入失败] [{timestamp}] {message}")
         print(f"[错误] {str(e)}")
 
+def compress_image_for_api(image_path, max_dimension=1024):
+    """
+    为API调用压缩图片，限制像素尺寸在指定范围内
+    
+    参数:
+        image_path: 图片文件路径
+        max_dimension: 最大像素尺寸（宽或高的最大值），默认1024
+    
+    返回:
+        str: 压缩后的图片路径（如果压缩了，可能是临时文件路径；否则返回原路径）
+        bool: 是否进行了压缩
+    """
+    if not os.path.exists(image_path):
+        return image_path, False
+    
+    try:
+        with Image.open(image_path) as img:
+            original_size = img.size
+            original_width, original_height = original_size
+            max_original_dimension = max(original_width, original_height)
+            
+            # 检查是否需要压缩尺寸
+            if max_original_dimension <= max_dimension:
+                log_project(f"图片尺寸符合要求: {original_width}x{original_height}，无需压缩")
+                return image_path, False
+            
+            log_project(f"开始压缩图片用于API: 原始尺寸={original_width}x{original_height}，目标最大尺寸={max_dimension}")
+            
+            # 计算缩放比例
+            scale = max_dimension / max_original_dimension
+            new_width = int(original_width * scale)
+            new_height = int(original_height * scale)
+            
+            log_project(f"压缩像素尺寸: {original_width}x{original_height} -> {new_width}x{new_height}")
+            
+            # 先缩放图片
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # 转换为RGB模式（JPEG不支持透明度）
+            if img.mode in ('RGBA', 'LA', 'P'):
+                # 创建白色背景
+                background = Image.new('RGB', (new_width, new_height), (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                # 粘贴到白色背景上
+                if img.mode == 'RGBA':
+                    background.paste(img, (0, 0), img.split()[-1])
+                else:
+                    background.paste(img, (0, 0))
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # 保存压缩后的图片（使用临时文件，避免覆盖原文件）
+            temp_path = image_path + '.api_compressed.jpg'
+            img.save(temp_path, 'JPEG', quality=85, optimize=True)
+            
+            compressed_size = os.path.getsize(temp_path)
+            log_project(f"压缩完成: 像素尺寸={new_width}x{new_height}, 文件大小={compressed_size/1024/1024:.2f}MB")
+            
+            return temp_path, True
+                
+    except Exception as e:
+        log_project(f"图片压缩失败: {str(e)}")
+        import traceback
+        log_project(f"压缩错误堆栈:\n{traceback.format_exc()}")
+        return image_path, False
+
 def encode_file_to_base64(file_path):
-    """将本地图片文件转换为 Base64 Data URL"""
+    """将本地图片文件转换为 Base64 Data URL（优化内存使用）"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"图片文件不存在: {file_path}")
     
@@ -195,8 +263,18 @@ def encode_file_to_base64(file_path):
     if not mime_type or not mime_type.startswith("image/"):
         raise ValueError("不支持或无法识别的图像格式")
     
+    # 检查文件大小，对大文件发出警告
+    file_size = os.path.getsize(file_path)
+    if file_size > 10 * 1024 * 1024:  # 10MB
+        log_project(f"警告: 文件较大 ({file_size/1024/1024:.2f}MB)，Base64编码可能占用约 {file_size*1.33/1024/1024:.2f}MB 内存")
+    
+    # 读取文件并编码（注意：base64.b64encode需要完整数据，无法流式处理）
     with open(file_path, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+        file_data = image_file.read()
+        encoded_string = base64.b64encode(file_data).decode('utf-8')
+        # 立即释放file_data引用，帮助GC回收
+        del file_data
+    
     return f"data:{mime_type};base64,{encoded_string}"
 
 def calculate_sofa_size_range(room_length, room_width):
@@ -775,7 +853,7 @@ def save_mask_image(original_image_filename, mask_data):
         # 先分析原始mask数据（在保存到文件之前）
         log_project(f"原始mask数据分析: 数据长度={len(mask_image_data)} bytes")
         
-        # 使用PIL直接从内存分析mask数据
+        # 使用PIL直接从内存分析mask数据（优化：使用逐像素访问避免加载全部像素到内存）
         try:
             with Image.open(io.BytesIO(mask_image_data)) as temp_mask:
                 log_project(f"内存中mask图片: 尺寸={temp_mask.size}, 模式={temp_mask.mode}, 格式={temp_mask.format}")
@@ -784,30 +862,37 @@ def save_mask_image(original_image_filename, mask_data):
                 if temp_mask.mode != 'RGBA':
                     temp_mask = temp_mask.convert('RGBA')
                 
-                # 分析前100个非透明像素的alpha值
-                # 使用新的 get_flattened_data() 方法（Pillow 10.0+）
-                try:
-                    pixels = list(temp_mask.get_flattened_data())
-                except AttributeError:
-                    # 兼容旧版本 Pillow
-                    pixels = list(temp_mask.getdata())
-                non_transparent_pixels = [(i, pixel) for i, pixel in enumerate(pixels) if pixel[3] > 0]
+                # 优化：使用load()方法逐像素访问，避免一次性加载所有像素到内存
+                width, height = temp_mask.size
+                pixels_data = temp_mask.load()
                 
-                log_project(f"内存分析: 总像素={len(pixels)}, 非透明像素={len(non_transparent_pixels)}")
+                # 采样分析：只分析部分像素，避免处理全部像素
+                sample_size = min(1000, width * height)  # 最多采样1000个像素
+                step = max(1, (width * height) // sample_size)
                 
-                if non_transparent_pixels:
-                    # 分析前10个非透明像素
-                    sample_pixels = non_transparent_pixels[:10]
-                    alpha_values = [pixel[1][3] for pixel in sample_pixels]
+                non_transparent_count = 0
+                alpha_samples = []
+                sample_pixels = []
+                
+                pixel_idx = 0
+                for y in range(height):
+                    for x in range(width):
+                        if pixel_idx % step == 0:  # 采样
+                            pixel = pixels_data[x, y]
+                            if pixel[3] > 0:  # 非透明像素
+                                non_transparent_count += 1
+                                alpha_samples.append(pixel[3])
+                                if len(sample_pixels) < 10:
+                                    sample_pixels.append(pixel)
+                        pixel_idx += 1
+                
+                log_project(f"内存分析: 图片尺寸={width}x{height}, 采样像素={len(alpha_samples)}, 非透明像素数≈{non_transparent_count * step}")
+                
+                if alpha_samples:
+                    log_project(f"样本像素alpha值: {[p[3] for p in sample_pixels[:10]]}")
                     
-                    log_project(f"样本像素alpha值: {alpha_values}")
-                    
-                    # 统计所有alpha值
-                    all_alphas = [pixel[3] for pixel in pixels if pixel[3] > 0]
-                    unique_alphas = list(set(all_alphas))
-                    
-                    if all_alphas:
-                        most_common_alpha = max(set(all_alphas), key=all_alphas.count)
+                    if alpha_samples:
+                        most_common_alpha = max(set(alpha_samples), key=alpha_samples.count)
                         detected_transparency = round((255 - most_common_alpha) / 255 * 100, 1)
                         log_project(f"内存分析检测到透明度: {detected_transparency}% (alpha={most_common_alpha})")
                 else:
@@ -847,65 +932,66 @@ def save_mask_image(original_image_filename, mask_data):
                     if mask_img.mode != 'RGBA':
                         mask_img = mask_img.convert('RGBA')
                     
-                    # 分析mask的透明度信息
-                    # 使用新的 get_flattened_data() 方法（Pillow 10.0+）
-                    try:
-                        mask_pixels = list(mask_img.get_flattened_data())
-                    except AttributeError:
-                        # 兼容旧版本 Pillow
-                        mask_pixels = list(mask_img.getdata())
-                    alpha_values = [pixel[3] for pixel in mask_pixels if pixel[3] > 0]  # 非透明像素的alpha值
-                    avg_alpha = sum(alpha_values) / len(alpha_values) if alpha_values else 0
+                    # 优化：使用load()方法逐像素访问，避免一次性加载所有像素到内存
+                    width, height = original_img.size
+                    original_pixels = original_img.load()
+                    mask_pixels = mask_img.load()
+                    
+                    # 采样分析mask的透明度信息（只分析部分像素）
+                    sample_size = min(1000, width * height)
+                    step = max(1, (width * height) // sample_size)
+                    alpha_samples = []
+                    pixel_idx = 0
+                    for y in range(height):
+                        for x in range(width):
+                            if pixel_idx % step == 0:
+                                pixel = mask_pixels[x, y]
+                                if pixel[3] > 0:
+                                    alpha_samples.append(pixel[3])
+                            pixel_idx += 1
+                    
+                    avg_alpha = sum(alpha_samples) / len(alpha_samples) if alpha_samples else 0
                     transparency_percentage = round((255 - avg_alpha) / 255 * 100, 2) if avg_alpha > 0 else 100
                     
                     log_project(f"Mask透明度分析: 平均Alpha={avg_alpha:.1f}, 透明度={transparency_percentage}%")
                     
-                    # 创建叠加图片 - 手动处理透明度混合
+                    # 创建叠加图片 - 使用逐像素处理，避免加载全部像素到内存
                     composite_img = original_img.copy()
+                    composite_pixels = composite_img.load()
                     
-                    # 获取像素数据进行手动混合
-                    # 使用新的 get_flattened_data() 方法（Pillow 10.0+）
-                    try:
-                        original_pixels = list(original_img.get_flattened_data())
-                        mask_pixels = list(mask_img.get_flattened_data())
-                    except AttributeError:
-                        # 兼容旧版本 Pillow
-                        original_pixels = list(original_img.getdata())
-                        mask_pixels = list(mask_img.getdata())
-                    
-                    # 手动混合像素，正确处理用户设置的透明度
-                    blended_pixels = []
+                    # 逐像素混合，正确处理用户设置的透明度
                     processed_count = 0
                     
-                    for orig_pixel, mask_pixel in zip(original_pixels, mask_pixels):
-                        if mask_pixel[3] == 0:  # mask像素完全透明，保持原始像素
-                            blended_pixels.append(orig_pixel)
-                        else:  # mask像素有颜色，这里需要正确处理透明度
-                            processed_count += 1
+                    for y in range(height):
+                        for x in range(width):
+                            mask_pixel = mask_pixels[x, y]
+                            orig_pixel = original_pixels[x, y]
                             
-                            # 获取mask的alpha值（这是用户设置的透明度）
-                            user_alpha = mask_pixel[3]  # 用户设置的alpha值
-                            user_alpha_ratio = user_alpha / 255.0  # 转换为0-1的比例
-                            
-                            # Alpha混合公式: result = mask * user_alpha + original * (1 - user_alpha)
-                            blended_r = int(mask_pixel[0] * user_alpha_ratio + orig_pixel[0] * (1 - user_alpha_ratio))
-                            blended_g = int(mask_pixel[1] * user_alpha_ratio + orig_pixel[1] * (1 - user_alpha_ratio))
-                            blended_b = int(mask_pixel[2] * user_alpha_ratio + orig_pixel[2] * (1 - user_alpha_ratio))
-                            
-                            # 保持原始背景的不透明度，但颜色已经混合了用户的透明度设置
-                            blended_a = orig_pixel[3]  # 保持原始背景的不透明度
-                            
-                            blended_pixels.append((blended_r, blended_g, blended_b, blended_a))
+                            if mask_pixel[3] == 0:  # mask像素完全透明，保持原始像素
+                                composite_pixels[x, y] = orig_pixel
+                            else:  # mask像素有颜色，进行透明度混合
+                                processed_count += 1
+                                
+                                # 获取mask的alpha值（这是用户设置的透明度）
+                                user_alpha = mask_pixel[3]  # 用户设置的alpha值
+                                user_alpha_ratio = user_alpha / 255.0  # 转换为0-1的比例
+                                
+                                # Alpha混合公式: result = mask * user_alpha + original * (1 - user_alpha)
+                                blended_r = int(mask_pixel[0] * user_alpha_ratio + orig_pixel[0] * (1 - user_alpha_ratio))
+                                blended_g = int(mask_pixel[1] * user_alpha_ratio + orig_pixel[1] * (1 - user_alpha_ratio))
+                                blended_b = int(mask_pixel[2] * user_alpha_ratio + orig_pixel[2] * (1 - user_alpha_ratio))
+                                
+                                # 保持原始背景的不透明度，但颜色已经混合了用户的透明度设置
+                                blended_a = orig_pixel[3]  # 保持原始背景的不透明度
+                                
+                                composite_pixels[x, y] = (blended_r, blended_g, blended_b, blended_a)
                     
                     log_project(f"透明度处理统计: 处理了{processed_count}个mask像素")
                     
-                    if alpha_values:
-                        most_common_alpha = max(set(alpha_values), key=alpha_values.count)
+                    if alpha_samples:
+                        most_common_alpha = max(set(alpha_samples), key=alpha_samples.count)
                         actual_transparency = round((255 - most_common_alpha) / 255 * 100, 1)
                         log_project(f"检测到的用户透明度设置: {actual_transparency}% (alpha={most_common_alpha})")
-                    
-                    # 创建新图片
-                    composite_img.putdata(blended_pixels)
                     
                     # 保存叠加图片
                     composite_filename = f"{base_name}_composite_mask_{timestamp}.png"
@@ -927,28 +1013,72 @@ def save_mask_image(original_image_filename, mask_data):
         log_project(f"保存mask图片失败: {str(e)}")
         raise e
 
+# 豆包客户端单例（避免重复创建客户端实例导致内存泄漏）
+_DOUBAO_CLIENT = None
+
+def get_doubao_client():
+    """获取豆包客户端实例（单例模式，避免内存泄漏）"""
+    global _DOUBAO_CLIENT
+    
+    if _DOUBAO_CLIENT is None:
+        if not DOUBAO_AVAILABLE:
+            raise Exception("豆包SDK未安装")
+        
+        api_key = os.getenv("ARK_API_KEY")
+        if not api_key:
+            raise Exception("未配置ARK_API_KEY环境变量")
+        
+        _DOUBAO_CLIENT = Ark(
+            base_url="https://ark.cn-beijing.volces.com/api/v3",
+            api_key=api_key
+        )
+        log_project("豆包客户端初始化成功（单例模式）")
+    
+    return _DOUBAO_CLIENT
+
 def call_doubao_image_fusion(mask_image_path, furniture_image_path, prompt_text):
     """调用豆包图像融合API"""
     if not DOUBAO_AVAILABLE:
         raise Exception("豆包SDK未安装")
     
-    # 配置API
-    api_key = os.getenv("ARK_API_KEY")
-    if not api_key:
-        raise Exception("未配置ARK_API_KEY环境变量")
+    # 使用全局客户端实例（单例模式）
+    client = get_doubao_client()
     
-    # 初始化客户端
-    client = Ark(
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
-        api_key=api_key
-    )
+    # 用于跟踪临时文件，以便后续清理
+    temp_files = []
     
     try:
-        # 编码图片为Base64
-        mask_base64 = encode_file_to_base64(mask_image_path)
-        furniture_base64 = encode_file_to_base64(furniture_image_path)
+        # 在编码前压缩图片，限制像素尺寸在1024×1024范围内
+        log_project(f"检查上传到豆包API的图片尺寸...")
         
-        log_project(f"开始调用豆包API - mask: {mask_image_path}, furniture: {furniture_image_path}")
+        # 压缩mask图片（如果需要）
+        mask_compressed_path, mask_compressed = compress_image_for_api(mask_image_path, max_dimension=1024)
+        if mask_compressed:
+            log_project(f"Mask图片已压缩: {mask_image_path} -> {mask_compressed_path}")
+            temp_files.append(mask_compressed_path)
+            mask_path_to_encode = mask_compressed_path
+        else:
+            mask_path_to_encode = mask_image_path
+        
+        # 压缩家具图片（如果需要）
+        furniture_compressed_path, furniture_compressed = compress_image_for_api(furniture_image_path, max_dimension=1024)
+        if furniture_compressed:
+            log_project(f"家具图片已压缩: {furniture_image_path} -> {furniture_compressed_path}")
+            temp_files.append(furniture_compressed_path)
+            furniture_path_to_encode = furniture_compressed_path
+        else:
+            furniture_path_to_encode = furniture_image_path
+        
+        # 编码图片为Base64
+        mask_base64 = encode_file_to_base64(mask_path_to_encode)
+        furniture_base64 = encode_file_to_base64(furniture_path_to_encode)
+        
+        # 记录Base64数据大小
+        mask_base64_size = len(mask_base64) / 1024 / 1024  # MB
+        furniture_base64_size = len(furniture_base64) / 1024 / 1024  # MB
+        log_project(f"Base64编码后大小 - Mask: {mask_base64_size:.2f}MB, Furniture: {furniture_base64_size:.2f}MB")
+        
+        log_project(f"开始调用豆包API - mask: {mask_path_to_encode}, furniture: {furniture_path_to_encode}")
         
         # 调用豆包图片生成API
         response = client.images.generate(
@@ -985,10 +1115,21 @@ def call_doubao_image_fusion(mask_image_path, furniture_image_path, prompt_text)
     except Exception as e:
         error_msg = f"豆包图像融合异常: {str(e)}"
         log_project(error_msg)
+        import traceback
+        log_project(f"异常堆栈:\n{traceback.format_exc()}")
         return {
             'success': False,
             'error': error_msg
         }
+    finally:
+        # 清理临时压缩文件
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                    log_project(f"已清理临时文件: {temp_file}")
+            except Exception as e:
+                log_project(f"清理临时文件失败 {temp_file}: {str(e)}")
 
 @app.route('/')
 def index():
@@ -1059,15 +1200,37 @@ def upload_file():
         log_project(f"上传文件错误: {str(e)}")
         return jsonify({'error': '上传失败'}), 500
 
-def load_furniture_metadata():
-    """加载家具元数据文件"""
+# 家具元数据缓存（避免每次请求都重新读取文件）
+_FURNITURE_METADATA_CACHE = None
+_FURNITURE_METADATA_CACHE_TIME = None
+_FURNITURE_METADATA_CACHE_TTL = 300  # 缓存5分钟（300秒）
+
+def load_furniture_metadata(force_reload=False):
+    """加载家具元数据文件（带缓存机制，避免内存泄漏）"""
+    global _FURNITURE_METADATA_CACHE, _FURNITURE_METADATA_CACHE_TIME
+    
+    # 检查缓存是否有效
+    if not force_reload and _FURNITURE_METADATA_CACHE is not None:
+        if _FURNITURE_METADATA_CACHE_TIME is not None:
+            current_time = time.time()
+            if current_time - _FURNITURE_METADATA_CACHE_TIME < _FURNITURE_METADATA_CACHE_TTL:
+                return _FURNITURE_METADATA_CACHE
+    
+    # 加载元数据
     metadata_path = os.path.join(app.config['FURNITURE_FOLDER'], 'furniture_metadata.json')
     
     if os.path.exists(metadata_path):
         try:
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
-                return metadata.get('furniture', [])
+                furniture_list = metadata.get('furniture', [])
+                
+                # 更新缓存
+                _FURNITURE_METADATA_CACHE = furniture_list
+                _FURNITURE_METADATA_CACHE_TIME = time.time()
+                
+                log_project(f"家具元数据加载成功，共 {len(furniture_list)} 个家具（已缓存）")
+                return furniture_list
         except Exception as e:
             log_project(f"加载家具元数据文件失败: {str(e)}")
             return []
@@ -1320,6 +1483,21 @@ def generate_decoration_v1():
         log_project(error_msg)
         return jsonify({'error': error_msg}), 500
 
+def init_app_resources():
+    """初始化应用资源（预加载缓存，避免首次请求延迟）"""
+    try:
+        # 预加载家具元数据缓存
+        load_furniture_metadata()
+        log_project("应用资源初始化完成：家具元数据缓存已加载")
+    except Exception as e:
+        log_project(f"应用资源初始化失败: {str(e)}")
+
+# 在模块加载时初始化资源（适用于Gunicorn等生产环境）
+try:
+    init_app_resources()
+except Exception as e:
+    print(f"警告: 应用资源初始化失败: {str(e)}")
+
 if __name__ == '__main__':
     # 目录已在模块级别创建，这里只是确认（用于直接运行时的日志输出）
     print("目录检查完成（已在模块级别创建）")
@@ -1327,6 +1505,12 @@ if __name__ == '__main__':
     # 检查豆包SDK可用性
     if DOUBAO_AVAILABLE:
         print("豆包SDK可用，图像生成功能正常")
+        # 预初始化豆包客户端（单例模式）
+        try:
+            get_doubao_client()
+            print("豆包客户端初始化成功")
+        except Exception as e:
+            print(f"豆包客户端初始化失败: {str(e)}")
     else:
         print("豆包SDK不可用，请安装: pip install 'volcengine-python-sdk[ark]'")
     

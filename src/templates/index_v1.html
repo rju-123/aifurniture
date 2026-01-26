@@ -1123,23 +1123,44 @@
             const previewImage = document.getElementById('previewImage');
             const canvasContainer = document.getElementById('canvasContainer');
             
-            // 设置画布尺寸
-            canvas.width = previewImage.naturalWidth;
-            canvas.height = previewImage.naturalHeight;
+            // 限制canvas最大尺寸为1024×1024，避免内存占用过大
+            const MAX_CANVAS_WIDTH = 1024;  // 最大宽度
+            const MAX_CANVAS_HEIGHT = 1024; // 最大高度
             
-            // 设置mask canvas尺寸
+            let canvasWidth = previewImage.naturalWidth;
+            let canvasHeight = previewImage.naturalHeight;
+            const originalWidth = canvasWidth;
+            const originalHeight = canvasHeight;
+            
+            // 如果图片超过最大尺寸，按比例缩放
+            if (canvasWidth > MAX_CANVAS_WIDTH || canvasHeight > MAX_CANVAS_HEIGHT) {
+                const scale = Math.min(
+                    MAX_CANVAS_WIDTH / canvasWidth,
+                    MAX_CANVAS_HEIGHT / canvasHeight
+                );
+                canvasWidth = Math.floor(canvasWidth * scale);
+                canvasHeight = Math.floor(canvasHeight * scale);
+                
+                console.log(`图片尺寸过大，已缩放: ${originalWidth}x${originalHeight} -> ${canvasWidth}x${canvasHeight}`);
+            }
+            
+            // 设置画布尺寸（使用限制后的尺寸）
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            
+            // 设置mask canvas尺寸（与主canvas相同）
             if (!maskCanvas || !maskCtx) {
                 maskCanvas = document.createElement('canvas');
                 maskCtx = maskCanvas.getContext('2d');
             }
-            maskCanvas.width = canvas.width;
-            maskCanvas.height = canvas.height;
+            maskCanvas.width = canvasWidth;
+            maskCanvas.height = canvasHeight;
             
-            // 设置显示尺寸
+            // 设置显示尺寸（仅用于CSS显示，不影响实际canvas像素尺寸）
             const maxWidth = 800;
             const maxHeight = 600;
-            let displayWidth = canvas.width;
-            let displayHeight = canvas.height;
+            let displayWidth = canvasWidth;
+            let displayHeight = canvasHeight;
             
             if (displayWidth > maxWidth) {
                 displayHeight = (displayHeight * maxWidth) / displayWidth;
@@ -1154,11 +1175,11 @@
             canvas.style.width = displayWidth + 'px';
             canvas.style.height = displayHeight + 'px';
             
-            // 绘制背景图片
+            // 绘制背景图片（使用缩放后的尺寸）
             const img = new Image();
             img.onload = function() {
                 ctx.globalAlpha = 1.0; // 确保背景图片完全不透明
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
                 saveState();
                 
                 // 清空mask canvas
