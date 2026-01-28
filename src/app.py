@@ -20,6 +20,17 @@ except ImportError:
     DOUBAO_AVAILABLE = False
     print("警告: 豆包SDK未安装，图像生成功能将不可用")
 
+# 尝试导入通义千问SDK
+try:
+    from dashscope import MultiModalConversation
+    import dashscope
+    DASHSCOPE_AVAILABLE = True
+    # 设置API地址（中国北京地域）
+    dashscope.base_http_api_url = 'https://dashscope.aliyuncs.com/api/v1'
+except ImportError:
+    DASHSCOPE_AVAILABLE = False
+    print("警告: DashScope SDK未安装，图像修复功能将不可用")
+
 # 加载环境变量
 load_dotenv()
 
@@ -915,11 +926,33 @@ def save_mask_image(original_image_filename, mask_data):
         log_project(f"保存纯mask文件: {pure_mask_filename}")
         
         # 2. 生成叠加图片：原始图片 + 蓝色涂抹
-        original_image_path = os.path.join(app.config['UPLOAD_FOLDER'], original_image_filename)
+        # 检查原始图片路径 - 可能在UPLOAD_FOLDER或OUTPUT_FOLDER中（擦除后的图片在OUTPUT_FOLDER）
+        original_image_path = None
         
-        if os.path.exists(original_image_path):
+        # 先检查UPLOAD_FOLDER
+        upload_path = os.path.join(app.config['UPLOAD_FOLDER'], original_image_filename)
+        if os.path.exists(upload_path):
+            original_image_path = upload_path
+            log_project(f"从UPLOAD_FOLDER读取原始图片: {original_image_filename}")
+        else:
+            # 如果在UPLOAD_FOLDER中找不到，尝试OUTPUT_FOLDER（擦除后的图片在这里）
+            output_path = os.path.join(app.config['OUTPUT_FOLDER'], original_image_filename)
+            if os.path.exists(output_path):
+                original_image_path = output_path
+                log_project(f"从OUTPUT_FOLDER读取原始图片: {original_image_filename}")
+            else:
+                log_project(f"错误: 无法找到原始图片: {original_image_filename} (已检查UPLOAD和OUTPUT文件夹)")
+                log_project(f"UPLOAD_FOLDER路径: {upload_path}")
+                log_project(f"OUTPUT_FOLDER路径: {output_path}")
+                raise FileNotFoundError(f"原始图片不存在: {original_image_filename}")
+        
+        if original_image_path and os.path.exists(original_image_path):
+            log_project(f"使用原始图片路径: {original_image_path}")
+            log_project(f"原始图片文件大小: {os.path.getsize(original_image_path)} bytes")
+            
             # 打开原始图片和mask图片
             with Image.open(original_image_path) as original_img:
+                log_project(f"原始图片尺寸: {original_img.size}, 模式: {original_img.mode}")
                 with Image.open(pure_mask_filepath) as mask_img:
                     # 确保两个图片尺寸一致
                     if original_img.size != mask_img.size:
@@ -999,10 +1032,19 @@ def save_mask_image(original_image_filename, mask_data):
                     composite_img.save(composite_filepath, 'PNG')
                     
                     log_project(f"生成叠加mask图片: {composite_filename}, 保持透明度: {transparency_percentage}%")
+                    log_project(f"叠加mask图片路径: {composite_filepath}")
+                    log_project(f"叠加mask图片文件大小: {os.path.getsize(composite_filepath)} bytes")
+                    log_project(f"叠加mask图片尺寸: {composite_img.size}, 模式: {composite_img.mode}")
+                    log_project(f"原始图片文件名: {original_image_filename}, 路径: {original_image_path}")
+                    log_project(f"✓ Mask图片已基于正确的原始图片生成（擦除后的场景）")
         else:
-            log_project(f"警告: 原始图片不存在: {original_image_path}")
-            composite_filename = pure_mask_filename
-            composite_filepath = pure_mask_filepath
+            error_msg = f"错误: 原始图片不存在，无法生成叠加mask图片"
+            if original_image_path:
+                error_msg += f": {original_image_path}"
+            else:
+                error_msg += f": {original_image_filename} (未找到文件)"
+            log_project(error_msg)
+            raise FileNotFoundError(error_msg)
         
         log_project(f"保存叠加mask图片: {composite_filename}")
         
@@ -1079,12 +1121,21 @@ def call_doubao_image_fusion(mask_image_path, furniture_image_path, prompt_text)
         log_project(f"Base64编码后大小 - Mask: {mask_base64_size:.2f}MB, Furniture: {furniture_base64_size:.2f}MB")
         
         log_project(f"开始调用豆包API - mask: {mask_path_to_encode}, furniture: {furniture_path_to_encode}")
+        log_project(f"Prompt: {prompt_text}")
+        
+        # 验证mask图片内容（检查前100个字符的Base64，确保不是空图片）
+        mask_preview = mask_base64[:100] if len(mask_base64) > 100 else mask_base64
+        log_project(f"Mask Base64预览（前100字符）: {mask_preview}")
+        log_project(f"Mask Base64总长度: {len(mask_base64)} 字符")
         
         # 调用豆包图片生成API
+        # mask图片应该包含：原始场景（擦除后的场景）+ 蓝色涂抹区域
+        # 这样API才能知道在哪个场景的哪个位置放置家具
+        log_project(f"调用豆包API，传入2张图片：1. mask（场景+蓝色涂抹）, 2. 家具")
         response = client.images.generate(
             model="doubao-seedream-4-5-251128",  # 豆包模型ID
             prompt=prompt_text,
-            image=[mask_base64, furniture_base64],  # 本地图片Base64列表
+            image=[mask_base64, furniture_base64],  # 本地图片Base64列表：[场景+蓝色涂抹, 家具]
             size="2K",  # 输出分辨率
             response_format="url",  # 输出格式：url
             watermark=False  # 不添加水印
@@ -1384,6 +1435,238 @@ def save_mask():
         log_project(f"保存mask图片错误: {str(e)}")
         return jsonify({'error': f'保存失败: {str(e)}'}), 500
 
+@app.route('/api/inpaint', methods=['POST'])
+def inpaint_image():
+    """图像修复接口：使用通义千问qwen-image-edit-plus模型擦除家具"""
+    try:
+        if not DASHSCOPE_AVAILABLE:
+            return jsonify({'error': 'DashScope SDK未安装，图像修复功能不可用'}), 500
+        
+        # 检查是否有文件上传
+        if 'original_image' not in request.files or 'mask_image' not in request.files:
+            return jsonify({'error': '缺少必要参数：需要上传original_image和mask_image'}), 400
+        
+        original_file = request.files['original_image']
+        mask_file = request.files['mask_image']
+        
+        if original_file.filename == '' or mask_file.filename == '':
+            return jsonify({'error': '文件不能为空'}), 400
+        
+        # 保存上传的文件
+        upload_folder = app.config['UPLOAD_FOLDER']
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        original_filename = secure_filename(original_file.filename)
+        original_unique = f"{uuid.uuid4()}_inpaint_original_{timestamp}_{original_filename}"
+        original_path = os.path.join(upload_folder, original_unique)
+        original_file.save(original_path)
+        
+        mask_filename = secure_filename(mask_file.filename)
+        mask_unique = f"{uuid.uuid4()}_inpaint_mask_{timestamp}_{mask_filename}"
+        mask_path = os.path.join(upload_folder, mask_unique)
+        mask_file.save(mask_path)
+        
+        log_project(f"开始图像修复 - 原图: {original_unique}, 蒙版: {mask_unique}")
+        
+        # 调用通义千问图像修复API
+        result = call_qwen_inpaint(original_path, mask_path)
+        
+        if result['success']:
+            # 下载并保存生成的图片
+            generated_images = result['images']
+            saved_images = []
+            
+            for i, image_url in enumerate(generated_images):
+                try:
+                    img_response = requests.get(image_url, timeout=30)
+                    if img_response.status_code == 200:
+                        output_filename = f"inpaint_{timestamp}_{i+1}.jpg"
+                        output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+                        
+                        with open(output_filepath, 'wb') as f:
+                            f.write(img_response.content)
+                        
+                        saved_images.append({
+                            'filename': output_filename,
+                            'path': f'/output/{output_filename}',
+                            'url': image_url
+                        })
+                        
+                        log_project(f"保存修复图片: {output_filename}")
+                    
+                except Exception as e:
+                    log_project(f"下载修复图片失败: {str(e)}")
+            
+            # 清理临时文件
+            try:
+                if os.path.exists(original_path):
+                    os.remove(original_path)
+                if os.path.exists(mask_path):
+                    os.remove(mask_path)
+            except Exception as e:
+                log_project(f"清理临时文件失败: {str(e)}")
+            
+            return jsonify({
+                'success': True,
+                'generated_images': saved_images,
+                'message': f'成功生成 {len(saved_images)} 张修复图片'
+            })
+        else:
+            return jsonify({'error': result['error']}), 500
+            
+    except Exception as e:
+        error_msg = f"图像修复错误: {str(e)}"
+        log_project(error_msg)
+        import traceback
+        log_project(f"异常堆栈:\n{traceback.format_exc()}")
+        return jsonify({'error': error_msg}), 500
+
+def call_qwen_inpaint(original_image_path, mask_image_path):
+    """调用通义千问qwen-image-edit-plus模型进行图像修复"""
+    if not DASHSCOPE_AVAILABLE:
+        raise Exception("DashScope SDK未安装")
+    
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        raise Exception("未配置DASHSCOPE_API_KEY环境变量")
+    
+    try:
+        # 压缩图片（如果需要）
+        original_compressed_path, original_compressed = compress_image_for_api(original_image_path, max_dimension=1024)
+        mask_compressed_path, mask_compressed = compress_image_for_api(mask_image_path, max_dimension=1024)
+        
+        temp_files = []
+        if original_compressed:
+            temp_files.append(original_compressed_path)
+        if mask_compressed:
+            temp_files.append(mask_compressed_path)
+        
+        # 编码原始图片为Base64
+        original_base64 = encode_file_to_base64(original_compressed_path if original_compressed else original_image_path)
+        
+        log_project(f"开始调用通义千问图像修复API")
+        
+        # 处理蒙版图片，确保是纯黑白格式
+        try:
+            with Image.open(mask_compressed_path if mask_compressed else mask_image_path) as mask_img:
+                # 转换为RGB模式（去除透明度）
+                if mask_img.mode != 'RGB':
+                    mask_img = mask_img.convert('RGB')
+                
+                # 转换为灰度图
+                mask_gray = mask_img.convert('L')
+                
+                # 二值化：将非黑色区域（要擦除的区域）设为白色(255)，黑色区域(保留)保持为0
+                # 使用PIL的像素操作，避免依赖numpy
+                pixels = list(mask_gray.getdata())
+                binary_pixels = []
+                white_count = 0
+                black_count = 0
+                
+                for pixel in pixels:
+                    # 阈值处理：大于10的像素设为255（白色），其余为0（黑色）
+                    if pixel > 10:
+                        binary_pixels.append(255)  # 白色 = 要擦除
+                        white_count += 1
+                    else:
+                        binary_pixels.append(0)   # 黑色 = 保留
+                        black_count += 1
+                
+                # 创建新的纯黑白蒙版图片
+                binary_mask_img = Image.new('L', mask_gray.size)
+                binary_mask_img.putdata(binary_pixels)
+                
+                # 转换为RGB（因为API可能需要RGB格式）
+                binary_mask_rgb = binary_mask_img.convert('RGB')
+                
+                # 保存处理后的蒙版（临时文件）
+                processed_mask_path = mask_image_path + '.processed.png'
+                binary_mask_rgb.save(processed_mask_path, 'PNG')
+                temp_files.append(processed_mask_path)
+                
+                # 使用处理后的蒙版
+                mask_path_to_encode = processed_mask_path
+                
+                log_project(f"蒙版已处理为纯黑白格式，白色区域={white_count}像素（要擦除），黑色区域={black_count}像素（保留）")
+        except Exception as e:
+            log_project(f"处理蒙版图片失败，使用原始蒙版: {str(e)}")
+            mask_path_to_encode = mask_compressed_path if mask_compressed else mask_image_path
+        
+        # 编码处理后的蒙版
+        mask_base64 = encode_file_to_base64(mask_path_to_encode)
+        
+        # 构造prompt - 明确说明要移除涂抹区域的家具，恢复为空的房间背景
+        prompt_text = "Remove the furniture in the white marked areas, restore the empty room background naturally. Keep the room structure unchanged, only remove the furniture objects. Generate a clean, empty living room space with the original room style and lighting."
+        
+        # 调用API
+        response = MultiModalConversation.call(
+            api_key=api_key,
+            model="qwen-image-edit-plus",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"image": original_base64},
+                        {"image": mask_base64},
+                        {"text": prompt_text}
+                    ]
+                }
+            ],
+            stream=False,
+            n=1,  # 生成1张图片
+            watermark=False,
+            negative_prompt="low quality, blurry, distorted, unrealistic, furniture visible",
+            prompt_extend=True
+        )
+        
+        # 处理响应
+        if response.status_code == 200:
+            generated_images = []
+            if hasattr(response, 'output') and hasattr(response.output, 'choices'):
+                for choice in response.output.choices:
+                    if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                        for content_item in choice.message.content:
+                            if isinstance(content_item, dict) and 'image' in content_item:
+                                generated_images.append(content_item['image'])
+            
+            log_project(f"通义千问API调用成功，生成{len(generated_images)}张图片")
+            
+            return {
+                'success': True,
+                'images': generated_images
+            }
+        else:
+            error_msg = f"通义千问API调用失败: status_code={response.status_code}"
+            if hasattr(response, 'code'):
+                error_msg += f", code={response.code}"
+            if hasattr(response, 'message'):
+                error_msg += f", message={response.message}"
+            
+            log_project(error_msg)
+            return {
+                'success': False,
+                'error': error_msg
+            }
+            
+    except Exception as e:
+        error_msg = f"通义千问图像修复异常: {str(e)}"
+        log_project(error_msg)
+        import traceback
+        log_project(f"异常堆栈:\n{traceback.format_exc()}")
+        return {
+            'success': False,
+            'error': error_msg
+        }
+    finally:
+        # 清理临时压缩文件
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                    log_project(f"已清理临时文件: {temp_file}")
+            except Exception as e:
+                log_project(f"清理临时文件失败 {temp_file}: {str(e)}")
+
 @app.route('/generate_v1', methods=['POST'])
 def generate_decoration_v1():
     """v1.0版本：调用豆包图像融合API生成家装效果图"""
@@ -1416,6 +1699,18 @@ def generate_decoration_v1():
         生成的图片中我用于标记沙发放置位置的蓝色不要再出现"""
         
         log_project(f"开始生成装修效果图 - 原图: {original_image}, 家具: {selected_furniture}, Mask: {mask_filename}")
+        log_project(f"Mask图片路径: {mask_path}")
+        log_project(f"家具图片路径: {furniture_path}")
+        
+        # 验证mask图片是否存在且可读
+        if os.path.exists(mask_path):
+            try:
+                with Image.open(mask_path) as test_img:
+                    log_project(f"Mask图片验证成功 - 尺寸: {test_img.size}, 模式: {test_img.mode}")
+            except Exception as e:
+                log_project(f"Mask图片验证失败: {str(e)}")
+        else:
+            log_project(f"错误: Mask图片不存在: {mask_path}")
         
         # 调用豆包图像融合API
         result = call_doubao_image_fusion(mask_path, furniture_path, prompt_text)

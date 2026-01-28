@@ -147,7 +147,7 @@
         }
 
         #drawingCanvas {
-            cursor: none; /* 隐藏默认光标，我们将自定义光标 */
+            cursor: none; /* Hide default cursor, we will use custom cursor */
         }
 
         .canvas-cursor {
@@ -327,7 +327,7 @@
         </div>
 
         <div class="main-content">
-            <!-- 步骤1: 上传客厅图片 -->
+            <!-- Step 1: Upload Living Room Image -->
             <div class="step active" id="step1">
                 <div class="step-title">
                     <div class="step-number">1</div>
@@ -345,7 +345,7 @@
                 </div>
             </div>
 
-            <!-- 步骤2: 识别客厅尺寸 -->
+            <!-- Step 2: Identify Living Room Dimensions -->
             <div class="step" id="step2">
                 <div class="step-title">
                     <div class="step-number">2</div>
@@ -433,7 +433,7 @@
                 </div>
             </div>
 
-            <!-- 步骤3: 选择沙发风格 -->
+            <!-- Step 3: Select Sofa Style -->
             <div class="step" id="step3">
                 <div class="step-title">
                     <div class="step-number">3</div>
@@ -458,21 +458,54 @@
                 </div>
             </div>
 
-            <!-- 步骤4: 选择沙发 -->
+            <!-- Step 4: Select Sofa -->
             <div class="step" id="step4">
                 <div class="step-title">
                     <div class="step-number">4</div>
                     Select Sofa
                 </div>
                 <div id="furnitureGrid" class="furniture-grid">
-                    <!-- 家具列表将通过JavaScript动态加载 -->
+                    <!-- Furniture list will be dynamically loaded via JavaScript -->
                 </div>
             </div>
 
-            <!-- 步骤5: 涂画放置区域 -->
+            <!-- Step 5: Erase Furniture -->
             <div class="step" id="step5">
                 <div class="step-title">
                     <div class="step-number">5</div>
+                    Erase Furniture (Optional)
+                </div>
+                <div class="canvas-tools">
+                    <div class="tool-group">
+                        <label>Brush Size: 100px (Fixed)</label>
+                    </div>
+                    <div class="tool-group">
+                        <label>Opacity: 100% (Fixed)</label>
+                    </div>
+                    <div class="tool-group">
+                        <button class="btn btn-secondary" id="eraseUndoBtn">↶ Undo</button>
+                        <button class="btn btn-danger" id="eraseClearBtn">🗑️ Clear All</button>
+                        <button class="btn" id="startEraseBtn" style="background: #dc3545;">Start Erasing</button>
+                        <button class="btn btn-secondary" id="skipEraseBtn" style="background: #6c757d;">Skip Erasing</button>
+                    </div>
+                </div>
+                <div class="canvas-container" id="eraseCanvasContainer" style="display: none;">
+                    <canvas id="eraseCanvas"></canvas>
+                    <div class="canvas-cursor" id="eraseCanvasCursor"></div>
+                </div>
+                <p style="color: #666; margin-top: 10px;">
+                    💡 Tip: Use the brush tool to draw white areas on the furniture you want to erase. The white areas will be removed and replaced with an empty room background. After erasing, the image will automatically proceed to the drawing step. You can also skip this step if you don't need to erase furniture.
+                </p>
+                <div class="loading" id="eraseLoading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Erasing furniture, please wait...</p>
+                </div>
+            </div>
+
+            <!-- Step 6: Draw Placement Area -->
+            <div class="step" id="step6">
+                <div class="step-title">
+                    <div class="step-number">6</div>
                     Draw Furniture Placement Area
                 </div>
                 <div class="canvas-tools">
@@ -496,10 +529,10 @@
                 </p>
             </div>
 
-            <!-- 步骤6: 生成效果图 -->
-            <div class="step" id="step6">
+            <!-- Step 7: Generate Effect Image -->
+            <div class="step" id="step7">
                 <div class="step-title">
-                    <div class="step-number">6</div>
+                    <div class="step-number">7</div>
                     Generate Decoration Effect Image
                 </div>
                 <button class="btn" id="generateBtn" disabled>🎨 Generate Decoration Effect Image</button>
@@ -510,17 +543,17 @@
                 </div>
 
                 <div class="result-container" id="resultContainer">
-                    <!-- 生成的结果将显示在这里 -->
+                    <!-- Generated results will be displayed here -->
                 </div>
             </div>
 
-            <!-- 消息提示 -->
+            <!-- Message Notification -->
             <div class="message" id="message"></div>
         </div>
     </div>
 
     <script>
-        // 全局变量
+        // Global variables
         let uploadedImageFile = null;
         let selectedFurniture = null;
         let canvas = null;
@@ -529,69 +562,80 @@
         let drawingHistory = [];
         let currentStep = 1;
         let canvasCursor = null;
-        let maskCanvas = null; // 用于存储mask图层的临时canvas
+        let maskCanvas = null; // Temporary canvas for storing mask layer
         let maskCtx = null;
-        let roomLength = null; // 客厅长度（米）
-        let roomWidth = null;  // 客厅宽度（米）
-        let selectedStyle = null; // 选中的沙发风格
+        let roomLength = null; // Living room length (meters)
+        let roomWidth = null;  // Living room width (meters)
+        let selectedStyle = null; // Selected sofa style
+        
+        // Erase function related variables
+        let eraseCanvas = null;
+        let eraseCtx = null;
+        let isErasing = false;
+        let eraseHistory = [];
+        let eraseMaskCanvas = null; // Temporary canvas for storing erase mask
+        let eraseMaskCtx = null;
+        let eraseCanvasCursor = null;
+        let currentTab = 'draw'; // Current tab: 'draw' or 'erase'
 
-        // 初始化
+        // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             initializeUpload();
             initializeCanvas();
             initializeButtons();
             initializeStyleSelection();
             initializeSizeButtons();
+            initializeEraseCanvas();
         });
         
-        // 初始化尺寸确认按钮（使用事件委托，确保动态元素也能响应）
+        // Initialize size confirmation buttons (using event delegation to ensure dynamic elements can respond)
         function initializeSizeButtons() {
-            // 使用事件委托，监听整个文档的点击事件（作为备选方案）
+            // Use event delegation to listen for click events on the entire document (as a fallback)
             document.addEventListener('click', function(e) {
-                // 确认尺寸按钮（识别失败时）
+                // Confirm size button (when recognition fails)
                 if (e.target && e.target.id === 'confirmSizeBtn') {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('事件委托捕获到确认尺寸按钮点击');
+                    console.log('Event delegation captured confirm size button click');
                     confirmSizeInput();
                 }
-                // 确认修改按钮（识别成功时）
+                // Confirm modification button (when recognition succeeds)
                 if (e.target && e.target.id === 'confirmSizeBtnSuccess') {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('事件委托捕获到确认修改按钮点击');
+                    console.log('Event delegation captured confirm modification button click');
                     confirmSizeModify();
                 }
             });
             
-            // 也尝试直接绑定（如果元素已存在）
+            // Also try direct binding (if element exists)
             setTimeout(() => {
                 const confirmBtn = document.getElementById('confirmSizeBtn');
                 const confirmBtnSuccess = document.getElementById('confirmSizeBtnSuccess');
                 
                 if (confirmBtn) {
-                    console.log('找到确认尺寸按钮，直接绑定事件');
+                    console.log('Found confirm size button, binding event directly');
                     confirmBtn.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('直接绑定的事件触发');
+                        console.log('Directly bound event triggered');
                         confirmSizeInput();
                     });
                 }
                 
                 if (confirmBtnSuccess) {
-                    console.log('找到确认修改按钮，直接绑定事件');
+                    console.log('Found confirm modification button, binding event directly');
                     confirmBtnSuccess.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('直接绑定的事件触发');
+                        console.log('Directly bound event triggered');
                         confirmSizeModify();
                     });
                 }
             }, 500);
         }
 
-        // 初始化上传功能
+        // Initialize upload function
         function initializeUpload() {
             const uploadArea = document.getElementById('uploadArea');
             const fileInput = document.getElementById('fileInput');
@@ -629,14 +673,14 @@
                 return;
             }
 
-            // 显示预览
+            // Show preview
             const reader = new FileReader();
             reader.onload = function(e) {
                 const previewImage = document.getElementById('previewImage');
                 previewImage.src = e.target.result;
                 document.getElementById('uploadedImage').style.display = 'block';
                 
-                // 上传文件
+                // Upload file
                 uploadFile(file);
             };
             reader.readAsDataURL(file);
@@ -646,7 +690,7 @@
             const formData = new FormData();
             formData.append('file', file);
 
-            // 显示上传和识别中的状态
+            // Show upload and recognition status
             const sizeLoading = document.getElementById('sizeLoading');
             if (sizeLoading) {
                 sizeLoading.style.display = 'block';
@@ -662,11 +706,11 @@
                     uploadedImageFile = data.filename;
                     showMessage('Living room image uploaded successfully, identifying dimensions...', 'success');
                     
-                    // 处理尺寸识别结果
+                    // Handle size detection results
                     if (data.size_detection) {
                         handleSizeDetection(data.size_detection);
                     } else {
-                        // 如果没有尺寸识别结果，直接进入下一步
+                        // If no size detection results, proceed directly to next step
                         if (sizeLoading) {
                             sizeLoading.style.display = 'none';
                         }
@@ -687,15 +731,15 @@
             });
         }
 
-        // 计算适合摆放沙发的尺寸范围（与后端公式一致）
+        // Calculate suitable sofa size range (consistent with backend formula)
         function calculateSofaSizeRange(roomLength, roomWidth) {
-            // 沙发长度：最大值 = 客厅长度 × 0.6，但不超过 3.5米
-            //           最小值 = 客厅长度 × 0.3，但不小于 1米
+            // Sofa length: max = room length × 0.6, but not exceeding 3.5m
+            //              min = room length × 0.3, but not less than 1m
             const sofaLengthMax = Math.min(roomLength * 0.6, 3.5);
             const sofaLengthMin = Math.max(roomLength * 0.3, 1.0);
             
-            // 沙发宽度：最大值 = 客厅宽度 × 0.3，但不超过 1米
-            //           最小值 = 客厅宽度 × 0.2，但不超过 0.7米
+            // Sofa width: max = room width × 0.3, but not exceeding 1m
+            //             min = room width × 0.2, but not exceeding 0.7m
             const sofaWidthMax = Math.min(roomWidth * 0.3, 1.0);
             const sofaWidthMin = Math.min(roomWidth * 0.2, 0.7);
             
@@ -728,10 +772,10 @@
                 sofaWidthRange.textContent = `${sofaRange.width.min} - ${sofaRange.width.max}`;
             }
             
-            console.log('沙发尺寸范围已更新:', sofaRange);
+            console.log('Sofa size range updated:', sofaRange);
         }
 
-        // 将函数暴露到全局作用域，以便onclick可以访问
+        // Expose function to global scope so onclick can access it
         window.confirmSizeInput = function() {
             console.log('=== confirmSizeInput 被调用 ===');
             const lengthInput = document.getElementById('manualLengthError');
@@ -750,11 +794,11 @@
             const length = parseFloat(lengthInput.value);
             const width = parseFloat(widthInput.value);
             
-            console.log('输入的尺寸 - 长度:', length, '宽度:', width);
-            console.log('长度值类型:', typeof length, '是否NaN:', isNaN(length));
-            console.log('宽度值类型:', typeof width, '是否NaN:', isNaN(width));
+            console.log('Input dimensions - length:', length, 'width:', width);
+            console.log('Length value type:', typeof length, 'isNaN:', isNaN(length));
+            console.log('Width value type:', typeof width, 'isNaN:', isNaN(width));
             
-            // 验证输入
+            // Validate input
             if (!length || length <= 0 || isNaN(length)) {
                 console.warn('长度验证失败');
                 if (errorMsg) {
@@ -784,7 +828,7 @@
             // 更新沙发尺寸范围显示
             updateSofaSizeRangeDisplay(length, width);
             
-            console.log('✓ 尺寸已保存 - 长度:', roomLength, '宽度:', roomWidth);
+            console.log('✓ Dimensions saved - length:', roomLength, 'width:', roomWidth);
             showMessage(`Dimensions confirmed: Length=${length.toFixed(2)}m, Width=${width.toFixed(2)}m`, 'success');
             
             // 自动进入下一步
@@ -801,7 +845,7 @@
             return window.confirmSizeInput();
         }
 
-        // 将函数暴露到全局作用域
+        // Expose function to global scope
         window.confirmSizeModify = function() {
             console.log('=== confirmSizeModify 被调用 ===');
             const lengthInput = document.getElementById('manualLength');
@@ -822,7 +866,7 @@
             
             console.log('输入的尺寸 - 长度:', length, '宽度:', width);
             
-            // 验证输入
+            // Validate input
             if (!length || length <= 0 || isNaN(length)) {
                 console.warn('长度验证失败');
                 if (errorMsg) {
@@ -842,7 +886,7 @@
                 return false;
             }
             
-            // 保存尺寸并更新显示
+            // Save dimensions and update display
             roomLength = length;
             roomWidth = width;
             
@@ -862,7 +906,7 @@
             // 更新沙发尺寸范围显示
             updateSofaSizeRangeDisplay(length, width);
             
-            console.log('✓ 尺寸已更新 - 长度:', roomLength, '宽度:', roomWidth);
+            console.log('✓ Dimensions updated - length:', roomLength, 'width:', roomWidth);
             showMessage(`Dimensions updated: Length=${length.toFixed(2)}m, Width=${width.toFixed(2)}m, sofa size range automatically updated`, 'success');
             
             return false; // 防止表单提交
@@ -874,7 +918,7 @@
         }
 
         function handleSizeDetection(sizeResult) {
-            console.log('处理尺寸识别结果:', sizeResult);
+            console.log('Processing size detection results:', sizeResult);
             
             const sizeLoading = document.getElementById('sizeLoading');
             const sizeResultDiv = document.getElementById('sizeResult');
@@ -883,18 +927,18 @@
             sizeLoading.style.display = 'none';
             
             if (sizeResult.success) {
-                // 识别成功（可能是估算值）
+                // Recognition successful (may be estimated value)
                 roomLength = sizeResult.length;
                 roomWidth = sizeResult.width;
                 
                 document.getElementById('detectedLength').textContent = roomLength.toFixed(2);
                 document.getElementById('detectedWidth').textContent = roomWidth.toFixed(2);
                 
-                // 设置手动输入框的默认值
+                // Set default values for manual input fields
                 document.getElementById('manualLength').value = roomLength.toFixed(2);
                 document.getElementById('manualWidth').value = roomWidth.toFixed(2);
                 
-                // 显示估算值提示
+                // Show estimated value hint
                 const estimatedBadge = document.getElementById('estimatedBadge');
                 if (sizeResult.is_estimated) {
                     if (estimatedBadge) {
@@ -908,7 +952,7 @@
                     showMessage('Living room dimensions identified successfully, you can continue or modify dimensions', 'success');
                 }
                 
-                // 显示适合摆放沙发的尺寸范围
+                // Display suitable sofa size range
                 if (sizeResult.sofa_length_range && sizeResult.sofa_width_range) {
                     const sofaSizeRange = document.getElementById('sofaSizeRange');
                     const sofaLengthRange = document.getElementById('sofaLengthRange');
@@ -924,40 +968,40 @@
                         sofaWidthRange.textContent = `${sizeResult.sofa_width_range.min} - ${sizeResult.sofa_width_range.max}`;
                     }
                     
-                    console.log('沙发尺寸范围:', sizeResult.sofa_length_range, sizeResult.sofa_width_range);
+                    console.log('Sofa size range:', sizeResult.sofa_length_range, sizeResult.sofa_width_range);
                 }
                 
                 sizeResultDiv.style.display = 'block';
                 sizeError.style.display = 'none';
                 
-                // 自动进入下一步（给用户一点时间查看结果）
+                // Automatically proceed to next step (give user some time to view results)
                 setTimeout(() => {
                     activateStep(3);
                 }, 1500);
             } else {
-                // 识别失败，显示错误信息和手动输入
+                // Recognition failed, show error message and manual input
                 document.getElementById('sizeErrorMessage').textContent = sizeResult.error || 'Unable to automatically identify dimensions';
                 sizeError.style.display = 'block';
                 sizeResultDiv.style.display = 'none';
             }
         }
 
-        // 初始化风格选择（使用事件委托）
+        // Initialize style selection (using event delegation)
         function initializeStyleSelection() {
-            // 使用事件委托，确保动态加载的元素也能响应
+            // Use event delegation to ensure dynamically loaded elements can respond
             document.addEventListener('click', function(e) {
-                // 检查是否点击了风格按钮
+                // Check if style button was clicked
                 if (e.target && e.target.classList.contains('style-btn')) {
                     const btn = e.target;
                     
-                    // 检查是否已输入房间尺寸
+                    // Check if room dimensions have been entered
                     if (!roomLength || !roomWidth) {
                         showMessage('Please confirm living room dimensions first', 'error');
                         activateStep(2);
                         return;
                     }
                     
-                    // 移除其他按钮的选中状态
+                    // Remove selected state from other buttons
                     const allStyleButtons = document.querySelectorAll('.style-btn');
                     allStyleButtons.forEach(b => {
                         b.style.opacity = '1';
@@ -966,7 +1010,7 @@
                         b.style.border = 'none';
                     });
                     
-                    // 选中当前按钮
+                    // Select current button
                     btn.style.opacity = '1';
                     btn.style.transform = 'scale(0.95)';
                     btn.style.background = '#764ba2';
@@ -987,14 +1031,14 @@
                     
                     showMessage(`Style selected: ${styleName}, loading sofas...`, 'success');
                     
-                    // 加载对应风格的沙发
+                    // Load sofas of corresponding style
                     loadFurnitureList(selectedStyle);
                     activateStep(4);
                 }
             });
         }
 
-        // 加载家具列表（根据风格和尺寸过滤）
+        // Load furniture list (filtered by style and size)
         function loadFurnitureList(style = null) {
             let url = '/furniture?';
             if (style) {
@@ -1040,36 +1084,36 @@
         }
 
         function selectFurniture(furniture, element) {
-            console.log('选择家具:', furniture);
+            console.log('Selecting furniture:', furniture);
             
-            // 清除之前的选择
+            // Clear previous selection
             document.querySelectorAll('.furniture-item').forEach(item => {
                 item.classList.remove('selected');
             });
             
-            // 选择当前家具
+            // Select current furniture
             element.classList.add('selected');
             selectedFurniture = furniture;
             
             showMessage(`Furniture selected: ${furniture.display_name || furniture.name}`, 'success');
             
-            // 进入步骤5（涂画放置区域）
-            console.log('进入步骤5 - 涂画放置区域');
+            // Enter step 5 (erase furniture, optional)
+            console.log('Entering step 5 - Erase furniture (optional)');
             activateStep(5);
             
-            // 延迟一点时间再设置canvas，确保DOM已更新
+            // Delay a bit before setting up erase canvas to ensure DOM is updated
             setTimeout(() => {
-                setupCanvas();
+                setupEraseCanvas();
             }, 100);
         }
 
-        // 初始化画布（延迟初始化，只在需要时初始化）
+        // Initialize canvas (lazy initialization, only when needed)
         function initializeCanvas() {
             canvas = document.getElementById('drawingCanvas');
             
-            // 如果canvas元素不存在，延迟初始化
+            // If canvas element doesn't exist, delay initialization
             if (!canvas) {
-                console.log('Canvas元素尚未加载，将在需要时初始化');
+                console.log('Canvas element not yet loaded, will initialize when needed');
                 return;
             }
             
@@ -1077,117 +1121,195 @@
                 ctx = canvas.getContext('2d');
                 canvasCursor = document.getElementById('canvasCursor');
                 
-                // 创建mask图层canvas
+                // Create mask layer canvas
                 maskCanvas = document.createElement('canvas');
                 maskCtx = maskCanvas.getContext('2d');
                 
-                // 设置画笔样式
+                // Set brush style
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
-                ctx.globalAlpha = 1.0; // 初始透明度为1
+                ctx.globalAlpha = 1.0; // Initial opacity is 1
                 
-                // 绑定事件
+                // Bind events
                 canvas.addEventListener('mousedown', startDrawing);
                 canvas.addEventListener('mousemove', handleMouseMove);
                 canvas.addEventListener('mouseup', stopDrawing);
                 canvas.addEventListener('mouseout', hideCanvasCursor);
                 canvas.addEventListener('mouseenter', showCanvasCursor);
                 
-                // 触摸事件支持
+                // Touch event support
                 canvas.addEventListener('touchstart', handleTouch);
                 canvas.addEventListener('touchmove', handleTouch);
                 canvas.addEventListener('touchend', stopDrawing);
                 
-                console.log('Canvas初始化成功');
+                console.log('Canvas initialized successfully');
             } catch (error) {
-                console.error('Canvas初始化失败:', error);
+                console.error('Canvas initialization failed:', error);
             }
         }
 
         function setupCanvas() {
-            if (!uploadedImageFile) return;
+            if (!uploadedImageFile) {
+                console.log('没有上传的图片，无法设置canvas');
+                return;
+            }
             
-            // 确保canvas已初始化
+            // 确保canvas已初始化（包括事件绑定）
             if (!canvas || !ctx) {
                 initializeCanvas();
             }
             
-            // 如果仍然无法初始化，说明canvas元素不存在
-            if (!canvas || !ctx) {
-                console.error('无法初始化canvas，元素可能不存在');
-                showMessage('Unable to initialize canvas, please refresh the page and try again', 'error');
+            // 如果canvas元素不存在，尝试重新获取
+            if (!canvas) {
+                canvas = document.getElementById('drawingCanvas');
+            }
+            if (!canvas) {
+                console.error('无法找到canvas元素');
+                showMessage('Unable to find canvas element, please refresh the page and try again', 'error');
                 return;
             }
             
+            // 如果ctx不存在，重新获取
+            if (!ctx) {
+                ctx = canvas.getContext('2d');
+            }
+            if (!ctx) {
+                console.error('无法获取canvas context');
+                showMessage('Unable to get canvas context, please refresh the page and try again', 'error');
+                return;
+            }
+            
+            // 确保事件已绑定（如果canvas是新创建的或重新获取的）
+            if (canvas && !canvas.hasAttribute('data-events-bound')) {
+                canvas.addEventListener('mousedown', startDrawing);
+                canvas.addEventListener('mousemove', handleMouseMove);
+                canvas.addEventListener('mouseup', stopDrawing);
+                canvas.addEventListener('mouseout', hideCanvasCursor);
+                canvas.addEventListener('mouseenter', showCanvasCursor);
+                canvas.addEventListener('touchstart', handleTouch);
+                canvas.addEventListener('touchmove', handleTouch);
+                canvas.addEventListener('touchend', stopDrawing);
+                canvas.setAttribute('data-events-bound', 'true');
+                console.log('图画canvas事件已绑定');
+            }
+            
+            // 重新设置画笔样式（确保图画功能正常）
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.globalAlpha = 1.0;
+            
             const previewImage = document.getElementById('previewImage');
             const canvasContainer = document.getElementById('canvasContainer');
+            
+            if (!previewImage || !previewImage.src) {
+                console.error('预览图片不存在');
+                return;
+            }
+            
+            // 获取预览图片的src，添加缓存破坏参数确保加载最新图片
+            let imageSrc = previewImage.src;
+            // 如果src是base64 data URL，直接使用，不要添加查询参数
+            // 如果src是服务器路径，添加时间戳参数以避免缓存
+            if (!imageSrc.startsWith('data:')) {
+                // 如果src不包含时间戳参数，添加一个以确保不使用缓存
+                if (!imageSrc.includes('?t=') && !imageSrc.includes('&t=')) {
+                    const separator = imageSrc.includes('?') ? '&' : '?';
+                    imageSrc = imageSrc + separator + 't=' + Date.now();
+                }
+            }
+            
+            console.log('setupCanvas: 准备加载图片，路径:', imageSrc);
+            console.log('setupCanvas: previewImage.src =', previewImage.src);
+            console.log('setupCanvas: uploadedImageFile =', uploadedImageFile);
             
             // 限制canvas最大尺寸为1024×1024，避免内存占用过大
             const MAX_CANVAS_WIDTH = 1024;  // 最大宽度
             const MAX_CANVAS_HEIGHT = 1024; // 最大高度
             
-            let canvasWidth = previewImage.naturalWidth;
-            let canvasHeight = previewImage.naturalHeight;
-            const originalWidth = canvasWidth;
-            const originalHeight = canvasHeight;
-            
-            // 如果图片超过最大尺寸，按比例缩放
-            if (canvasWidth > MAX_CANVAS_WIDTH || canvasHeight > MAX_CANVAS_HEIGHT) {
-                const scale = Math.min(
-                    MAX_CANVAS_WIDTH / canvasWidth,
-                    MAX_CANVAS_HEIGHT / canvasHeight
-                );
-                canvasWidth = Math.floor(canvasWidth * scale);
-                canvasHeight = Math.floor(canvasHeight * scale);
-                
-                console.log(`图片尺寸过大，已缩放: ${originalWidth}x${originalHeight} -> ${canvasWidth}x${canvasHeight}`);
-            }
-            
-            // 设置画布尺寸（使用限制后的尺寸）
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
-            
-            // 设置mask canvas尺寸（与主canvas相同）
-            if (!maskCanvas || !maskCtx) {
-                maskCanvas = document.createElement('canvas');
-                maskCtx = maskCanvas.getContext('2d');
-            }
-            maskCanvas.width = canvasWidth;
-            maskCanvas.height = canvasHeight;
-            
-            // 设置显示尺寸（仅用于CSS显示，不影响实际canvas像素尺寸）
-            const maxWidth = 800;
-            const maxHeight = 600;
-            let displayWidth = canvasWidth;
-            let displayHeight = canvasHeight;
-            
-            if (displayWidth > maxWidth) {
-                displayHeight = (displayHeight * maxWidth) / displayWidth;
-                displayWidth = maxWidth;
-            }
-            
-            if (displayHeight > maxHeight) {
-                displayWidth = (displayWidth * maxHeight) / displayHeight;
-                displayHeight = maxHeight;
-            }
-            
-            canvas.style.width = displayWidth + 'px';
-            canvas.style.height = displayHeight + 'px';
-            
-            // 绘制背景图片（使用缩放后的尺寸）
+            // 等待图片加载完成
             const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
             img.onload = function() {
+                console.log('setupCanvas: 图片加载成功，尺寸:', img.width, 'x', img.height);
+                let canvasWidth = img.width;
+                let canvasHeight = img.height;
+                const originalWidth = canvasWidth;
+                const originalHeight = canvasHeight;
+                
+                // 如果图片超过最大尺寸，按比例缩放
+                if (canvasWidth > MAX_CANVAS_WIDTH || canvasHeight > MAX_CANVAS_HEIGHT) {
+                    const scale = Math.min(
+                        MAX_CANVAS_WIDTH / canvasWidth,
+                        MAX_CANVAS_HEIGHT / canvasHeight
+                    );
+                    canvasWidth = Math.floor(canvasWidth * scale);
+                    canvasHeight = Math.floor(canvasHeight * scale);
+                    
+                    console.log(`图片尺寸过大，已缩放: ${originalWidth}x${originalHeight} -> ${canvasWidth}x${canvasHeight}`);
+                }
+                
+                // 设置画布尺寸（使用限制后的尺寸）
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+                
+                // 设置mask canvas尺寸（与主canvas相同）
+                if (!maskCanvas || !maskCtx) {
+                    maskCanvas = document.createElement('canvas');
+                    maskCtx = maskCanvas.getContext('2d');
+                }
+                maskCanvas.width = canvasWidth;
+                maskCanvas.height = canvasHeight;
+                
+                // 设置显示尺寸（仅用于CSS显示，不影响实际canvas像素尺寸）
+                const maxWidth = 800;
+                const maxHeight = 600;
+                let displayWidth = canvasWidth;
+                let displayHeight = canvasHeight;
+                
+                if (displayWidth > maxWidth) {
+                    displayHeight = (displayHeight * maxWidth) / displayWidth;
+                    displayWidth = maxWidth;
+                }
+                
+                if (displayHeight > maxHeight) {
+                    displayWidth = (displayWidth * maxHeight) / displayHeight;
+                    displayHeight = maxHeight;
+                }
+                
+                canvas.style.width = displayWidth + 'px';
+                canvas.style.height = displayHeight + 'px';
+                
+                // 绘制背景图片（使用缩放后的尺寸）
                 ctx.globalAlpha = 1.0; // 确保背景图片完全不透明
                 ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
                 saveState();
                 
                 // 清空mask canvas
                 maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+                
+                // 显示canvas容器
+                if (canvasContainer) {
+                    canvasContainer.style.display = 'block';
+                }
+                
+                // 确保canvas cursor已初始化
+                if (!canvasCursor) {
+                    canvasCursor = document.getElementById('canvasCursor');
+                }
+                
+                console.log('图画canvas设置完成，图画功能已准备就绪');
             };
-            img.src = previewImage.src;
             
-            canvasContainer.style.display = 'block';
+            img.onerror = function() {
+                console.error('setupCanvas: 加载预览图片失败，路径:', imageSrc);
+                console.error('setupCanvas: previewImage.src =', previewImage.src);
+                showMessage('加载图片失败，请刷新页面重试', 'error');
+            };
+            
+            img.src = imageSrc;
         }
 
         function updateCanvasCursor(e) {
@@ -1375,7 +1497,7 @@
             }
             
             if (canGenerate) {
-                activateStep(6);
+                activateStep(7);
             }
         }
 
@@ -1567,6 +1689,714 @@
                 message.classList.remove('show');
             }, 5000);
         }
+        
+        // 初始化标签页（已移除，擦除现在是独立步骤）
+        function initializeTabs() {
+            // 标签页功能已移除，擦除现在是步骤5，图画是步骤6
+        }
+        
+        // 初始化擦除Canvas
+        function initializeEraseCanvas() {
+            eraseCanvas = document.getElementById('eraseCanvas');
+            if (!eraseCanvas) return;
+            
+            try {
+                eraseCtx = eraseCanvas.getContext('2d');
+                eraseCanvasCursor = document.getElementById('eraseCanvasCursor');
+                
+                // 创建擦除mask图层canvas
+                eraseMaskCanvas = document.createElement('canvas');
+                eraseMaskCtx = eraseMaskCanvas.getContext('2d');
+                
+                // 设置画笔样式
+                eraseCtx.globalCompositeOperation = 'source-over';
+                eraseCtx.lineCap = 'round';
+                eraseCtx.lineJoin = 'round';
+                eraseCtx.globalAlpha = 1.0;
+                
+                // 绑定事件
+                eraseCanvas.addEventListener('mousedown', startErasing);
+                eraseCanvas.addEventListener('mousemove', handleEraseMouseMove);
+                eraseCanvas.addEventListener('mouseup', stopErasing);
+                eraseCanvas.addEventListener('mouseout', hideEraseCanvasCursor);
+                eraseCanvas.addEventListener('mouseenter', showEraseCanvasCursor);
+                
+                // 触摸事件支持
+                eraseCanvas.addEventListener('touchstart', handleEraseTouch);
+                eraseCanvas.addEventListener('touchmove', handleEraseTouch);
+                eraseCanvas.addEventListener('touchend', stopErasing);
+                
+                console.log('擦除Canvas初始化成功');
+            } catch (error) {
+                console.error('擦除Canvas初始化失败:', error);
+            }
+        }
+        
+        // 设置擦除Canvas
+        function setupEraseCanvas() {
+            if (!uploadedImageFile) {
+                console.log('没有上传的图片，无法设置擦除canvas');
+                return;
+            }
+            
+            if (!eraseCanvas || !eraseCtx) {
+                initializeEraseCanvas();
+            }
+            
+            if (!eraseCanvas || !eraseCtx) {
+                console.error('无法初始化擦除canvas');
+                return;
+            }
+            
+            const previewImage = document.getElementById('previewImage');
+            const eraseCanvasContainer = document.getElementById('eraseCanvasContainer');
+            
+            if (!previewImage || !previewImage.src) {
+                console.error('预览图片不存在');
+                return;
+            }
+            
+            // 使用与主canvas相同的尺寸限制
+            const MAX_CANVAS_WIDTH = 1024;
+            const MAX_CANVAS_HEIGHT = 1024;
+            
+            // 等待图片加载完成
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            img.onload = function() {
+                console.log('擦除canvas背景图片加载成功，尺寸:', img.width, 'x', img.height);
+                
+                let canvasWidth = img.width;
+                let canvasHeight = img.height;
+                const originalWidth = canvasWidth;
+                const originalHeight = canvasHeight;
+                
+                // 如果图片超过最大尺寸，按比例缩放
+                if (canvasWidth > MAX_CANVAS_WIDTH || canvasHeight > MAX_CANVAS_HEIGHT) {
+                    const scale = Math.min(
+                        MAX_CANVAS_WIDTH / canvasWidth,
+                        MAX_CANVAS_HEIGHT / canvasHeight
+                    );
+                    canvasWidth = Math.floor(canvasWidth * scale);
+                    canvasHeight = Math.floor(canvasHeight * scale);
+                    console.log(`擦除canvas尺寸缩放: ${originalWidth}x${originalHeight} -> ${canvasWidth}x${canvasHeight}`);
+                }
+                
+                // 设置画布尺寸
+                eraseCanvas.width = canvasWidth;
+                eraseCanvas.height = canvasHeight;
+                
+                // 设置mask canvas尺寸
+                if (!eraseMaskCanvas || !eraseMaskCtx) {
+                    eraseMaskCanvas = document.createElement('canvas');
+                    eraseMaskCtx = eraseMaskCanvas.getContext('2d');
+                }
+                eraseMaskCanvas.width = canvasWidth;
+                eraseMaskCanvas.height = canvasHeight;
+                
+                // 设置显示尺寸
+                const maxWidth = 800;
+                const maxHeight = 600;
+                let displayWidth = canvasWidth;
+                let displayHeight = canvasHeight;
+                
+                if (displayWidth > maxWidth) {
+                    displayHeight = (displayHeight * maxWidth) / displayWidth;
+                    displayWidth = maxWidth;
+                }
+                
+                if (displayHeight > maxHeight) {
+                    displayWidth = (displayWidth * maxHeight) / displayHeight;
+                    displayHeight = maxHeight;
+                }
+                
+                eraseCanvas.style.width = displayWidth + 'px';
+                eraseCanvas.style.height = displayHeight + 'px';
+                
+                // 绘制背景图片
+                eraseCtx.globalAlpha = 1.0;
+                eraseCtx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+                saveEraseState();
+                
+                // 清空mask canvas
+                eraseMaskCtx.clearRect(0, 0, eraseMaskCanvas.width, eraseMaskCanvas.height);
+                
+                // 显示canvas容器
+                if (eraseCanvasContainer) {
+                    eraseCanvasContainer.style.display = 'block';
+                    console.log('擦除canvas已显示');
+                }
+            };
+            
+            img.onerror = function() {
+                console.error('加载擦除canvas背景图片失败:', previewImage.src);
+                showMessage('加载图片失败，请刷新页面重试', 'error');
+            };
+            
+            // 使用预览图片的src
+            img.src = previewImage.src;
+        }
+        
+        // 擦除相关函数
+        function startErasing(e) {
+            isErasing = true;
+            saveEraseState();
+            drawEraseCircle(e);
+        }
+        
+        function drawEraseCircle(e) {
+            if (!isErasing) return;
+            
+            const rect = eraseCanvas.getBoundingClientRect();
+            const scaleX = eraseCanvas.width / rect.width;
+            const scaleY = eraseCanvas.height / rect.height;
+            
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            const brushSize = 100;
+            const radius = brushSize / 2;
+            
+            // 在mask canvas上绘制白色（表示要擦除的区域）
+            eraseMaskCtx.globalCompositeOperation = 'source-over';
+            eraseMaskCtx.globalAlpha = 1.0;
+            eraseMaskCtx.fillStyle = 'rgb(255, 255, 255)'; // 白色表示要擦除
+            
+            eraseMaskCtx.beginPath();
+            eraseMaskCtx.arc(x, y, radius, 0, 2 * Math.PI);
+            eraseMaskCtx.fill();
+            
+            // 重新绘制整个canvas
+            redrawEraseCanvas();
+        }
+        
+        function redrawEraseCanvas() {
+            // 清除主canvas
+            eraseCtx.clearRect(0, 0, eraseCanvas.width, eraseCanvas.height);
+            
+            // 重新绘制背景图片
+            if (eraseHistory.length > 0) {
+                eraseCtx.putImageData(eraseHistory[0], 0, 0);
+            }
+            
+            // 以红色半透明显示要擦除的区域（预览效果）
+            eraseCtx.globalAlpha = 0.5;
+            eraseCtx.drawImage(eraseMaskCanvas, 0, 0);
+            eraseCtx.globalAlpha = 1.0;
+        }
+        
+        function stopErasing() {
+            if (isErasing) {
+                isErasing = false;
+                eraseCtx.globalAlpha = 1.0;
+            }
+        }
+        
+        function handleEraseMouseMove(e) {
+            updateEraseCanvasCursor(e);
+            if (isErasing) {
+                drawEraseCircle(e);
+            }
+        }
+        
+        function updateEraseCanvasCursor(e) {
+            if (!eraseCanvasCursor) return;
+            
+            const rect = eraseCanvas.getBoundingClientRect();
+            const brushSize = 100;
+            
+            const cursorSize = brushSize * (rect.width / eraseCanvas.width);
+            eraseCanvasCursor.style.width = cursorSize + 'px';
+            eraseCanvasCursor.style.height = cursorSize + 'px';
+            eraseCanvasCursor.style.left = (e.clientX - rect.left - cursorSize/2) + 'px';
+            eraseCanvasCursor.style.top = (e.clientY - rect.top - cursorSize/2) + 'px';
+            eraseCanvasCursor.style.background = `rgba(255, 0, 0, 0.3)`;
+        }
+        
+        function showEraseCanvasCursor() {
+            if (eraseCanvasCursor) {
+                eraseCanvasCursor.style.display = 'block';
+            }
+        }
+        
+        function hideEraseCanvasCursor() {
+            if (eraseCanvasCursor) {
+                eraseCanvasCursor.style.display = 'none';
+            }
+        }
+        
+        function handleEraseTouch(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : 
+                                            e.type === 'touchmove' ? 'mousemove' : 'mouseup', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            
+            if (e.type === 'touchstart') {
+                startErasing(mouseEvent);
+            } else if (e.type === 'touchmove') {
+                handleEraseMouseMove(mouseEvent);
+            } else if (e.type === 'touchend') {
+                stopErasing();
+            }
+        }
+        
+        function saveEraseState() {
+            eraseHistory.push(eraseCtx.getImageData(0, 0, eraseCanvas.width, eraseCanvas.height));
+            if (eraseHistory.length > 20) {
+                eraseHistory.shift();
+            }
+        }
+        
+        function eraseUndo() {
+            if (eraseHistory.length > 1) {
+                eraseHistory.pop();
+                const previousState = eraseHistory[eraseHistory.length - 1];
+                eraseCtx.putImageData(previousState, 0, 0);
+                
+                // 清空mask canvas
+                eraseMaskCtx.clearRect(0, 0, eraseMaskCanvas.width, eraseMaskCanvas.height);
+            }
+        }
+        
+        function eraseClear() {
+            if (eraseHistory.length > 0) {
+                const originalState = eraseHistory[0];
+                eraseCtx.putImageData(originalState, 0, 0);
+                eraseHistory = [originalState];
+                
+                // 清空mask canvas
+                eraseMaskCtx.clearRect(0, 0, eraseMaskCanvas.width, eraseMaskCanvas.height);
+            }
+        }
+        
+        // 开始擦除
+        function startErase() {
+            if (!uploadedImageFile) {
+                showMessage('请先上传客厅图片', 'error');
+                return;
+            }
+            
+            // 检查是否有绘制蒙版
+            const hasMask = eraseMaskCanvas && !isCanvasEmpty(eraseMaskCanvas);
+            if (!hasMask) {
+                showMessage('请先在图片上涂抹要擦除的家具区域', 'error');
+                return;
+            }
+            
+            // 显示加载状态
+            const eraseLoading = document.getElementById('eraseLoading');
+            const startEraseBtn = document.getElementById('startEraseBtn');
+            
+            if (eraseLoading) {
+                eraseLoading.style.display = 'block';
+            }
+            if (startEraseBtn) {
+                startEraseBtn.disabled = true;
+            }
+            
+            // 获取原始图片和蒙版
+            const previewImage = document.getElementById('previewImage');
+            const originalImageUrl = previewImage.src;
+            
+            // 创建一个纯黑白的mask canvas（白色=要擦除，黑色=保留）
+            const binaryMaskCanvas = document.createElement('canvas');
+            binaryMaskCanvas.width = eraseMaskCanvas.width;
+            binaryMaskCanvas.height = eraseMaskCanvas.height;
+            const binaryMaskCtx = binaryMaskCanvas.getContext('2d');
+            
+            // 先绘制黑色背景（保留区域）
+            binaryMaskCtx.fillStyle = 'rgb(0, 0, 0)';
+            binaryMaskCtx.fillRect(0, 0, binaryMaskCanvas.width, binaryMaskCanvas.height);
+            
+            // 获取eraseMaskCanvas的像素数据，找出白色区域
+            const maskImageData = eraseMaskCtx.getImageData(0, 0, eraseMaskCanvas.width, eraseMaskCanvas.height);
+            const maskData = maskImageData.data;
+            
+            // 创建新的ImageData用于纯黑白蒙版
+            const binaryImageData = binaryMaskCtx.createImageData(binaryMaskCanvas.width, binaryMaskCanvas.height);
+            const binaryData = binaryImageData.data;
+            
+            // 遍历每个像素，将非黑色（有绘制）的区域设为白色，其余保持黑色
+            for (let i = 0; i < maskData.length; i += 4) {
+                const r = maskData[i];
+                const g = maskData[i + 1];
+                const b = maskData[i + 2];
+                const a = maskData[i + 3];
+                
+                // 如果像素不是完全透明且不是黑色，则设为白色（要擦除的区域）
+                if (a > 0 && (r > 0 || g > 0 || b > 0)) {
+                    binaryData[i] = 255;     // R
+                    binaryData[i + 1] = 255; // G
+                    binaryData[i + 2] = 255; // B
+                    binaryData[i + 3] = 255; // A (完全不透明)
+                } else {
+                    // 保持黑色（保留区域）
+                    binaryData[i] = 0;       // R
+                    binaryData[i + 1] = 0;   // G
+                    binaryData[i + 2] = 0;   // B
+                    binaryData[i + 3] = 255; // A (完全不透明)
+                }
+            }
+            
+            // 将处理后的ImageData绘制到canvas上
+            binaryMaskCtx.putImageData(binaryImageData, 0, 0);
+            
+            console.log('蒙版已转换为纯黑白格式（白色=擦除，黑色=保留）');
+            
+            // 将mask canvas转换为blob
+            binaryMaskCanvas.toBlob(function(maskBlob) {
+                // 将原始图片转换为blob
+                fetch(originalImageUrl)
+                    .then(response => response.blob())
+                    .then(originalBlob => {
+                        // 创建FormData
+                        const formData = new FormData();
+                        formData.append('original_image', originalBlob, 'original.jpg');
+                        formData.append('mask_image', maskBlob, 'mask.png');
+                        
+                        // 调用API
+                        fetch('/api/inpaint', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (eraseLoading) {
+                                eraseLoading.style.display = 'none';
+                            }
+                            if (startEraseBtn) {
+                                startEraseBtn.disabled = false;
+                            }
+                            
+                            if (data.success && data.generated_images && data.generated_images.length > 0) {
+                                // 使用第一张生成的图片
+                                const resultImage = data.generated_images[0];
+                                
+                                console.log('擦除成功，生成的图片:', resultImage);
+                                
+                                // 将擦除后的图片加载到图画canvas中（这个函数会处理所有设置）
+                                loadErasedImageToDrawCanvas(resultImage.path, resultImage.filename);
+                                
+                                showMessage('擦除成功！图片已更新，自动进入图画步骤', 'success');
+                                
+                                // 自动进入步骤6（图画）- 不需要再次调用setupCanvas，因为loadErasedImageToDrawCanvas已经处理了
+                                setTimeout(() => {
+                                    activateStep(6);
+                                }, 1500);
+                            } else {
+                                showMessage(data.error || '擦除失败', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            if (eraseLoading) {
+                                eraseLoading.style.display = 'none';
+                            }
+                            if (startEraseBtn) {
+                                startEraseBtn.disabled = false;
+                            }
+                            console.error('擦除错误:', error);
+                            showMessage('擦除失败: ' + error.message, 'error');
+                        });
+                    })
+                    .catch(error => {
+                        if (eraseLoading) {
+                            eraseLoading.style.display = 'none';
+                        }
+                        if (startEraseBtn) {
+                            startEraseBtn.disabled = false;
+                        }
+                        console.error('加载原始图片失败:', error);
+                        showMessage('加载原始图片失败', 'error');
+                    });
+            }, 'image/png');
+        }
+        
+        // 检查canvas是否为空
+        function isCanvasEmpty(canvas) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // 检查是否有非透明像素
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] > 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        
+        // 将擦除后的图片加载到图画canvas
+        function loadErasedImageToDrawCanvas(imagePath, filename) {
+            console.log('开始加载擦除后的图片:', imagePath, '文件名:', filename);
+            
+            // 构建完整的图片URL
+            let fullImagePath = imagePath;
+            if (!imagePath.startsWith('http') && !imagePath.startsWith('/')) {
+                fullImagePath = '/' + imagePath;
+            }
+            if (!fullImagePath.startsWith('http')) {
+                fullImagePath = window.location.origin + fullImagePath;
+            }
+            
+            console.log('完整图片路径:', fullImagePath);
+            
+            const img = new Image();
+            img.crossOrigin = 'anonymous'; // 允许跨域加载
+            
+            img.onload = function() {
+                console.log('擦除后的图片加载成功，尺寸:', img.width, 'x', img.height);
+                
+                // 更新预览图片（先更新预览，这样canvas可以获取正确的尺寸）
+                const previewImage = document.getElementById('previewImage');
+                
+                // 清除可能的缓存，确保加载新图片
+                const cacheBuster = '?t=' + Date.now();
+                const imageUrlWithCacheBuster = fullImagePath + (fullImagePath.includes('?') ? '&' : '?') + cacheBuster;
+                
+                // 先更新预览图片src（添加缓存破坏参数，确保加载新图片）
+                // 这样后续的setupCanvas函数就能使用正确的图片路径
+                previewImage.onload = null;
+                previewImage.onerror = null;
+                previewImage.src = imageUrlWithCacheBuster;
+                console.log('预览图片src已更新为:', imageUrlWithCacheBuster);
+                
+                // 使用已加载的img对象（擦除后的图片）来设置canvas
+                // 这样确保canvas使用的是擦除后的图片，而不是依赖previewImage.src（可能有延迟）
+                const setupDrawCanvas = function() {
+                    // 确保canvas已初始化（包括事件绑定）
+                    if (!canvas || !ctx) {
+                        initializeCanvas();
+                    }
+                    
+                    // 如果canvas元素不存在，尝试重新获取
+                    if (!canvas) {
+                        canvas = document.getElementById('drawingCanvas');
+                    }
+                    if (!canvas) {
+                        console.error('无法找到canvas元素');
+                        showMessage('无法找到canvas元素，请刷新页面重试', 'error');
+                        return;
+                    }
+                    
+                    // 如果ctx不存在，重新获取
+                    if (!ctx) {
+                        ctx = canvas.getContext('2d');
+                    }
+                    if (!ctx) {
+                        console.error('无法获取canvas context');
+                        showMessage('无法获取canvas context，请刷新页面重试', 'error');
+                        return;
+                    }
+                    
+                    // 确保事件已绑定（如果canvas是新创建的或重新获取的）
+                    if (canvas && !canvas.hasAttribute('data-events-bound')) {
+                        canvas.addEventListener('mousedown', startDrawing);
+                        canvas.addEventListener('mousemove', handleMouseMove);
+                        canvas.addEventListener('mouseup', stopDrawing);
+                        canvas.addEventListener('mouseout', hideCanvasCursor);
+                        canvas.addEventListener('mouseenter', showCanvasCursor);
+                        canvas.addEventListener('touchstart', handleTouch);
+                        canvas.addEventListener('touchmove', handleTouch);
+                        canvas.addEventListener('touchend', stopDrawing);
+                        canvas.setAttribute('data-events-bound', 'true');
+                        console.log('图画canvas事件已重新绑定');
+                    }
+                    
+                    // 使用与擦除canvas相同的尺寸限制
+                    const MAX_CANVAS_WIDTH = 1024;
+                    const MAX_CANVAS_HEIGHT = 1024;
+                    
+                    let canvasWidth = img.width;
+                    let canvasHeight = img.height;
+                    const originalWidth = canvasWidth;
+                    const originalHeight = canvasHeight;
+                    
+                    // 如果图片超过最大尺寸，按比例缩放
+                    if (canvasWidth > MAX_CANVAS_WIDTH || canvasHeight > MAX_CANVAS_HEIGHT) {
+                        const scale = Math.min(
+                            MAX_CANVAS_WIDTH / canvasWidth,
+                            MAX_CANVAS_HEIGHT / canvasHeight
+                        );
+                        canvasWidth = Math.floor(canvasWidth * scale);
+                        canvasHeight = Math.floor(canvasHeight * scale);
+                        console.log(`图画canvas尺寸缩放: ${originalWidth}x${originalHeight} -> ${canvasWidth}x${canvasHeight}`);
+                    }
+                    
+                    // 设置画布尺寸
+                    canvas.width = canvasWidth;
+                    canvas.height = canvasHeight;
+                    
+                    // 重新设置画笔样式（确保图画功能正常）
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.globalAlpha = 1.0;
+                    
+                    // 设置mask canvas尺寸
+                    if (!maskCanvas || !maskCtx) {
+                        maskCanvas = document.createElement('canvas');
+                        maskCtx = maskCanvas.getContext('2d');
+                    }
+                    maskCanvas.width = canvasWidth;
+                    maskCanvas.height = canvasHeight;
+                    
+                    // 设置显示尺寸
+                    const maxWidth = 800;
+                    const maxHeight = 600;
+                    let displayWidth = canvasWidth;
+                    let displayHeight = canvasHeight;
+                    
+                    if (displayWidth > maxWidth) {
+                        displayHeight = (displayHeight * maxWidth) / displayWidth;
+                        displayWidth = maxWidth;
+                    }
+                    
+                    if (displayHeight > maxHeight) {
+                        displayWidth = (displayWidth * maxHeight) / displayHeight;
+                        displayHeight = maxHeight;
+                    }
+                    
+                    canvas.style.width = displayWidth + 'px';
+                    canvas.style.height = displayHeight + 'px';
+                    
+                    // 清除canvas
+                    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                    
+                    // 绘制新图片（保持原有尺寸）
+                    ctx.globalAlpha = 1.0;
+                    ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+                    
+                    // 保存状态（这是图画功能的初始状态）
+                    drawingHistory = [];
+                    saveState();
+                    
+                    // 清空mask canvas（准备用于图画功能）
+                    maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+                    
+                    // 更新上传的文件名（使用新的文件名）
+                    if (filename) {
+                        uploadedImageFile = filename;
+                        console.log('更新上传的文件名:', uploadedImageFile);
+                    }
+                    
+                    // 显示canvas容器
+                    const canvasContainer = document.getElementById('canvasContainer');
+                    if (canvasContainer) {
+                        canvasContainer.style.display = 'block';
+                    }
+                    
+                    // 确保canvas cursor已初始化
+                    if (!canvasCursor) {
+                        canvasCursor = document.getElementById('canvasCursor');
+                    }
+                    
+                    console.log('擦除后的图片已成功加载到图画canvas，图画功能已准备就绪');
+                };
+                
+                // 直接使用已加载的img对象（擦除后的图片）设置canvas
+                // 这样确保canvas使用的是擦除后的图片，而不是依赖previewImage.src（可能有延迟或缓存问题）
+                console.log('使用已加载的擦除后图片设置canvas（img对象）');
+                setupDrawCanvas();
+                
+                // 预览图片src已经在上面更新了，这里只是确认一下
+                console.log('预览图片src已更新，当前值:', previewImage.src);
+            };
+            
+            img.onerror = function() {
+                console.error('加载擦除后的图片失败，路径:', fullImagePath);
+                showMessage('加载擦除后的图片失败，请检查图片路径: ' + fullImagePath, 'error');
+            };
+            
+            // 加载图片
+            img.src = fullImagePath;
+        }
+        
+        // 跳过擦除步骤
+        function skipErase() {
+            console.log('跳过擦除步骤，直接进入图画步骤');
+            
+            // 确保预览图片src正确设置
+            const previewImage = document.getElementById('previewImage');
+            if (!previewImage || !previewImage.src) {
+                console.error('预览图片不存在，无法跳过擦除');
+                showMessage('请先上传图片', 'error');
+                return;
+            }
+            
+            // 如果previewImage.src是base64 data URL，需要确保它能正确加载
+            // 如果previewImage.src是服务器路径，也需要确保路径正确
+            console.log('skipErase: previewImage.src =', previewImage.src);
+            console.log('skipErase: uploadedImageFile =', uploadedImageFile);
+            
+            // 如果previewImage.src是base64 data URL，直接使用
+            // 如果是服务器路径，确保路径正确
+            if (!previewImage.src.startsWith('data:')) {
+                // 如果是服务器路径，确保使用正确的路径
+                // 如果uploadedImageFile存在，可以构建正确的路径
+                if (uploadedImageFile) {
+                    // 检查路径是否已经正确
+                    const expectedPath = '/uploads/' + uploadedImageFile;
+                    if (!previewImage.src.includes(uploadedImageFile)) {
+                        console.log('更新预览图片路径为:', expectedPath);
+                        previewImage.src = expectedPath;
+                    }
+                }
+            }
+            
+            activateStep(6);
+            // 设置图画canvas
+            setTimeout(() => {
+                setupCanvas();
+            }, 100);
+        }
+        
+        // 绑定擦除相关按钮事件
+        document.addEventListener('DOMContentLoaded', function() {
+            // 使用事件委托绑定擦除按钮
+            document.addEventListener('click', function(e) {
+                if (e.target && e.target.id === 'eraseUndoBtn') {
+                    e.preventDefault();
+                    eraseUndo();
+                }
+                if (e.target && e.target.id === 'eraseClearBtn') {
+                    e.preventDefault();
+                    eraseClear();
+                }
+                if (e.target && e.target.id === 'startEraseBtn') {
+                    e.preventDefault();
+                    startErase();
+                }
+                if (e.target && e.target.id === 'skipEraseBtn') {
+                    e.preventDefault();
+                    skipErase();
+                }
+            });
+            
+            // 也尝试直接绑定
+            setTimeout(() => {
+                const eraseUndoBtn = document.getElementById('eraseUndoBtn');
+                const eraseClearBtn = document.getElementById('eraseClearBtn');
+                const startEraseBtn = document.getElementById('startEraseBtn');
+                const skipEraseBtn = document.getElementById('skipEraseBtn');
+                
+                if (eraseUndoBtn) {
+                    eraseUndoBtn.addEventListener('click', eraseUndo);
+                }
+                if (eraseClearBtn) {
+                    eraseClearBtn.addEventListener('click', eraseClear);
+                }
+                if (startEraseBtn) {
+                    startEraseBtn.addEventListener('click', startErase);
+                }
+                if (skipEraseBtn) {
+                    skipEraseBtn.addEventListener('click', skipErase);
+                }
+            }, 500);
+        });
     </script>
 </body>
 </html>
